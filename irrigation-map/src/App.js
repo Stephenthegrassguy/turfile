@@ -1,19 +1,19 @@
+// irrigation-map/src/App.js
 import React, { useState, useEffect } from "react";
 import './App.css';
-import { GoogleMap, Marker, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
-import { auth, db, storage } from "./firebase";
+import { useJsApiLoader } from "@react-google-maps/api";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import Login from "./Login";
-import {
-  collection,
-  addDoc,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  updateDoc,
-  getDocs
-} from "firebase/firestore";
+import { collection, addDoc, deleteDoc, doc, onSnapshot, updateDoc, getDocs } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+
+import { auth, db, storage } from "./firebase";
+
+import Login from "./Login";
+import MapComponent from "./components/MapComponent";
+import MapItems from "./components/MapItems";
+import LogManagement from "./components/LogManagement";
+import PlacementManagement from "./components/PlacementManagement";
+import ManageAreas from "./components/ManageAreas";
 
 const containerStyle = {
   width: "100vw",
@@ -29,22 +29,31 @@ function App() {
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY
   });
-  
 
   const [user, setUser] = useState(null);
   const [items, setItems] = useState([]);
   const [placingType, setPlacingType] = useState(null);
   const [itemName, setItemName] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
-  const [showLogForm, setShowLogForm] = useState(false);
+  const [showAddObjectForm, setShowAddObjectForm] = useState(false);
+  const [showManageAreas, setShowManageAreas] = useState(false);
   const [logDate, setLogDate] = useState("");
   const [logNotes, setLogNotes] = useState("");
   const [logImage, setLogImage] = useState(null);
   const [logs, setLogs] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [expandedLog, setExpandedLog] = useState(null);
+
+  const [holes, setHoles] = useState([]);
+  const [areaTypes, setAreaTypes] = useState([]);
+  const [areasByHole, setAreasByHole] = useState({});
+  const [selectedHole, setSelectedHole] = useState("");
+  const [selectedArea, setSelectedArea] = useState("");
+  const [manageHoleName, setManageHoleName] = useState("");
+  const [manageAreaType, setManageAreaType] = useState("");
+  const [expandedHole, setExpandedHole] = useState(null);
 
   const itemsRef = collection(db, "irrigationItems");
+  const holesCollection = collection(db, "holes");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -61,12 +70,27 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = onSnapshot(holesCollection, (snapshot) => {
+      const holesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setHoles(holesData.map(h => h.name));
+      const areasData = holesData.reduce((acc, hole) => {
+        acc[hole.name] = hole.areas || [];
+        return acc;
+      }, {});
+      setAreasByHole(areasData);
+    });
+    return () => unsubscribe();
+  }, []);
+
   const handleMapClick = async (e) => {
-    if (!placingType || !itemName) return;
+    if (!placingType || !itemName || !selectedHole || !selectedArea) return;
 
     const newItem = {
       type: placingType,
       name: itemName,
+      hole: selectedHole,
+      area: selectedArea,
       position: {
         lat: e.latLng.lat(),
         lng: e.latLng.lng()
@@ -78,6 +102,9 @@ function App() {
     await addDoc(itemsRef, newItem);
     setPlacingType(null);
     setItemName("");
+    setSelectedHole("");
+    setSelectedArea("");
+    setShowAddObjectForm(false);
   };
 
   const handleAddLog = async () => {
@@ -101,7 +128,6 @@ function App() {
         createdAt: new Date()
       });
 
-      setShowLogForm(false);
       setLogDate("");
       setLogNotes("");
       setLogImage(null);
@@ -173,6 +199,63 @@ function App() {
     }
   };
 
+  const addHole = async (holeName) => {
+    if (!holes.includes(holeName)) {
+      try {
+        await addDoc(holesCollection, { name: holeName, areas: [] });
+      } catch (error) {
+        alert("Error adding hole: ", error.message);
+      }
+      setManageHoleName('');
+    }
+  };
+
+  const addAreaType = (areaType) => {
+    if (!areaTypes.includes(areaType)) {
+      setAreaTypes([...areaTypes, areaType]);
+      setManageAreaType('');
+    }
+  };
+
+  const toggleAreaForHole = async (holeName, areaType) => {
+    const holeDoc = holes.find(h => h.name === holeName);
+    if (holeDoc) {
+      const updatedAreas = areasByHole[holeName].includes(areaType)
+        ? areasByHole[holeName].filter(a => a !== areaType)
+        : [...areasByHole[holeName], areaType];
+
+      setAreasByHole(prev => ({
+        ...prev,
+        [holeName]: updatedAreas
+      }));
+
+      try {
+        await updateDoc(doc(db, "holes", holeDoc.id), { areas: updatedAreas });
+      } catch (error) {
+        alert("Error updating areas: ", error.message);
+      }
+    }
+  };
+
+  const removeHole = async (holeName) => {
+    const holeDoc = holes.find(h => h.name === holeName);
+    if (holeDoc) {
+      try {
+        await deleteDoc(doc(db, "holes", holeDoc.id));
+      } catch (error) {
+        alert("Error removing hole: ", error.message);
+      }
+    }
+  };
+
+  const removeAreaType = (areaType) => {
+    setAreaTypes(areaTypes.filter(a => a !== areaType));
+    setAreasByHole(Object.keys(areasByHole).reduce((acc, hole) => ({
+      ...acc,
+      [hole]: areasByHole[hole].filter(a => a !== areaType)
+    }), {}));
+  };
+
   if (!isLoaded) return <div>Loading Map...</div>;
   if (!user) return <Login />;
 
@@ -181,27 +264,44 @@ function App() {
   return (
     <div>
       <div style={{ position: "absolute", top: 10, left: 10, zIndex: 1 }}>
-        <button onClick={() => setPlacingType("head")}>Place Head</button>
-        <button onClick={() => setPlacingType("valve")}>Place Valve</button>
-        <button onClick={() => setPlacingType("satellite")}>Place Satellite</button>
-        <button onClick={() => setPlacingType("splice box")}>Place Splice Box</button>
-        <button onClick={() => setPlacingType("wire")}>Place Wire</button>
-        <button onClick={() => setPlacingType("pipe")}>Place Pipe</button>
+        <button onClick={() => setShowAddObjectForm(true)}>Add Object</button>
+        <button onClick={() => setShowManageAreas(true)}>Manage Areas</button>
       </div>
 
-      {placingType && (
-        <div style={{ position: "absolute", top: 160, left: 10, background: "white", padding: "10px", border: "1px solid gray", zIndex: 2 }}>
-          <p><strong>Placing:</strong> {placingType.toUpperCase()}</p>
-          <input
-            type="text"
-            placeholder="Enter item name"
-            value={itemName}
-            onChange={(e) => setItemName(e.target.value)}
-          />
-          <p style={{ fontSize: "0.85rem", marginTop: "5px" }}>
-            Click anywhere on the map to place it.
-          </p>
-        </div>
+      {showAddObjectForm && (
+        <PlacementManagement
+          placingType={placingType}
+          setPlacingType={setPlacingType}
+          itemName={itemName}
+          setItemName={setItemName}
+          holes={holes}
+          selectedHole={selectedHole}
+          setSelectedHole={setSelectedHole}
+          selectedArea={selectedArea}
+          setSelectedArea={setSelectedArea}
+          areasByHole={areasByHole}
+          setShowAddObjectForm={setShowAddObjectForm}
+        />
+      )}
+
+      {showManageAreas && (
+        <ManageAreas
+          holes={holes}
+          areaTypes={areaTypes}
+          manageAreaType={manageAreaType}
+          setManageAreaType={setManageAreaType}
+          addAreaType={addAreaType}
+          manageHoleName={manageHoleName}
+          setManageHoleName={setManageHoleName}
+          addHole={addHole}
+          setExpandedHole={setExpandedHole}
+          expandedHole={expandedHole}
+          removeHole={removeHole}
+          removeAreaType={removeAreaType}
+          areasByHole={areasByHole}
+          toggleAreaForHole={toggleAreaForHole}
+          setShowManageAreas={setShowManageAreas}
+        />
       )}
 
       <div style={{ position: "absolute", top: 10, right: 10, zIndex: 1 }}>
@@ -219,109 +319,38 @@ function App() {
         </div>
       )}
 
-      <GoogleMap
-        mapContainerStyle={containerStyle}
+      <MapComponent
         center={center}
-        zoom={18}
-        onClick={handleMapClick}
-        options={{
-          mapTypeId: "satellite",
-          tilt: 0,
-          disableDefaultUI: true,
-          zoomControl: true,
-          streetViewControl: false,
-          mapTypeControl: false,
-          fullscreenControl: false
-        }}
+        containerStyle={containerStyle}
+        onMapClick={handleMapClick}
       >
-        {items.map((item) => (
-          <Marker
-            key={item.id}
-            position={item.position}
-            icon={getShapeIcon(item.type)}
-            onClick={() => {
-              setSelectedItem(item);
-              setLogs([]);
-            }}
-            label={{
-              text: item.name || "",
-              fontSize: "10px",
-              fontWeight: "bold"
-            }}
-          />
-        ))}
+        <MapItems
+          items={items}
+          selectedItem={selectedItem}
+          setSelectedItem={setSelectedItem}
+          getShapeIcon={getShapeIcon}
+          setLogs={setLogs}
+          toggleStatus={toggleStatus}
+          confirmAndDelete={confirmAndDelete}
+          handleViewHistory={handleViewHistory}
+        />
+      </MapComponent>
 
-        {selectedItem && (
-          <InfoWindow
-            position={selectedItem.position}
-            onCloseClick={() => {
-              setSelectedItem(null);
-              setShowLogForm(false);
-              setExpandedLog(null);
-            }}
-          >
-            <div style={{ maxWidth: "300px" }}>
-              <p><strong>{selectedItem.name}</strong></p>
-              <p>Type: {selectedItem.type}</p>
-              <div style={{ display: "flex", alignItems: "center" }}>
-                <span style={{ marginRight: 8 }}>Status:</span>
-                <label className="switch">
-                  <input type="checkbox" checked={selectedItem.status === "working"} onChange={toggleStatus} />
-                  <span className="slider round"></span>
-                </label>
-              </div>
-              <button onClick={confirmAndDelete} style={{ marginTop: 10 }}>Delete</button>
-              <button onClick={() => setShowLogForm(true)} style={{ marginLeft: "8px" }}>Add Log</button>
-              <button onClick={handleViewHistory} style={{ marginLeft: "8px" }}>View History</button>
-
-              {showLogForm && (
-                <div style={{ marginTop: "10px" }}>
-                  <input type="date" value={logDate} onChange={(e) => setLogDate(e.target.value)} /><br />
-                  <textarea
-                    placeholder="Enter notes"
-                    value={logNotes}
-                    onChange={(e) => setLogNotes(e.target.value)}
-                    style={{ width: "100%", height: "60px", marginTop: "5px" }}
-                  /><br />
-                  <input type="file" onChange={(e) => setLogImage(e.target.files[0])} /><br />
-                  <button onClick={handleAddLog} disabled={uploading}>Save Log</button>
-                  <button onClick={() => setShowLogForm(false)} style={{ marginLeft: "8px" }}>Cancel</button>
-                </div>
-              )}
-
-              {logs.length > 0 && (
-                <div style={{ marginTop: "10px" }}>
-                  <h4>Log History:</h4>
-                  {logs.map((log, idx) => (
-                    <div key={idx} style={{ display: "flex", alignItems: "center", marginBottom: "5px", cursor: "pointer" }} onClick={() => setExpandedLog(log)}>
-                      {log.imageUrl && <img src={log.imageUrl} alt="log-thumb" style={{ width: "30px", height: "30px", objectFit: "cover", marginRight: "8px" }} />}
-                      <div>
-                        <strong>{log.date}</strong><br />
-                        <span style={{ fontSize: "12px" }}>{log.notes.substring(0, 30)}...</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </InfoWindow>
-        )}
-
-        {expandedLog && (
-          <InfoWindow
-            position={selectedItem.position}
-            onCloseClick={() => setExpandedLog(null)}
-          >
-            <div style={{ maxWidth: "300px" }}>
-              <h4>Log Detail</h4>
-              <p><strong>Date:</strong> {expandedLog.date}</p>
-              <p><strong>Notes:</strong> {expandedLog.notes}</p>
-              {expandedLog.imageUrl && <img src={expandedLog.imageUrl} alt="log" style={{ width: "100%" }} />}
-              <button onClick={() => setExpandedLog(null)} style={{ marginTop: "8px" }}>Close</button>
-            </div>
-          </InfoWindow>
-        )}
-      </GoogleMap>
+      {selectedItem && (
+        <LogManagement
+          logs={logs}
+          logDate={logDate}
+          logNotes={logNotes}
+          logImage={logImage}
+          selectedItem={selectedItem}
+          handleAddLog={handleAddLog}
+          handleViewHistory={handleViewHistory}
+          setLogDate={setLogDate}
+          setLogNotes={setLogNotes}
+          setLogImage={setLogImage}
+          uploading={uploading}
+        />
+      )}
     </div>
   );
 }
