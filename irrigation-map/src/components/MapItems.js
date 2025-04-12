@@ -1,4 +1,4 @@
-// irrigation-map/src/components/MapItems.js
+// Updated MapItems.js
 import React from "react";
 import { Marker } from "@react-google-maps/api";
 import LogManagement from "./LogManagement";
@@ -9,7 +9,6 @@ const MapItems = ({
   setSelectedItem,
   getShapeIcon,
   setLogs,
-  toggleStatus,
   confirmAndDelete,
   handleViewHistory,
   handleAddLog,
@@ -20,7 +19,8 @@ const MapItems = ({
   setLogNotes,
   logImage,
   setLogImage,
-  uploading
+  uploading,
+  refreshSelectedItem
 }) => (
   <>
     {items.map(item => (
@@ -35,7 +35,8 @@ const MapItems = ({
         label={{
           text: item.name || "",
           fontSize: "10px",
-          fontWeight: "bold"
+          fontWeight: "bold",
+          color: "#FFFFFF"
         }}
       />
     ))}
@@ -45,7 +46,8 @@ const MapItems = ({
         position={selectedItem.position}
         onClose={() => setSelectedItem(null)}
         selectedItem={selectedItem}
-        toggleStatus={toggleStatus}
+        setSelectedItem={setSelectedItem}
+        refreshSelectedItem={refreshSelectedItem}
         confirmAndDelete={confirmAndDelete}
         handleAddLog={handleAddLog}
         handleViewHistory={handleViewHistory}

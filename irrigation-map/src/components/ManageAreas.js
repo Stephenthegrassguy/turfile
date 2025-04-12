@@ -1,112 +1,171 @@
-import React, { useState, useEffect } from 'react';
-import { collection, addDoc, onSnapshot, deleteDoc, doc } from "firebase/firestore";
+import React, { useState } from "react";
 import { db } from "../firebase";
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  getDocs
+} from "firebase/firestore";
 
-const ManageAreas = ({ setShowManageAreas }) => {
-  const [holes, setHoles] = useState([]);
-  const [areas, setAreas] = useState([]);
+import {
+  panelBase,
+  overlayBase,
+  button,
+  input,
+  headerBase
+} from "../styles/PanelStyles";
+
+const ManageAreas = ({ holes, areas, setShowManageAreas }) => {
   const [newArea, setNewArea] = useState("");
   const [newHole, setNewHole] = useState("");
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [panelPosition, setPanelPosition] = useState({ top: 100, left: 300 });
+  const [localAreas, setLocalAreas] = useState([...areas]);
+  const [localHoles, setLocalHoles] = useState([...holes]);
 
-  const areasCollection = collection(db, "areas");
-  const holesCollection = collection(db, "holes");
+  const startDrag = (e) => {
+    setDragging(true);
+    setOffset({ x: e.clientX - panelPosition.left, y: e.clientY - panelPosition.top });
+  };
 
-  useEffect(() => {
-    const unsubscribeAreas = onSnapshot(areasCollection, (snapshot) => {
-      setAreas(snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name })));
-    });
+  const onDrag = (e) => {
+    if (!dragging) return;
+    const newLeft = e.clientX - offset.x;
+    const newTop = e.clientY - offset.y;
+    setPanelPosition({ top: newTop, left: newLeft });
+  };
 
-    const unsubscribeHoles = onSnapshot(holesCollection, (snapshot) => {
-      setHoles(snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name })));
-    });
-
-    return () => {
-      unsubscribeAreas();
-      unsubscribeHoles();
-    };
-  }, []);
+  const stopDrag = () => setDragging(false);
 
   const addArea = async () => {
-    if (newArea && !areas.some(area => area.name === newArea)) {
-      try {
-        await addDoc(areasCollection, { name: newArea });
-        setNewArea("");
-      } catch (error) {
-        alert("Error adding area: " + error.message);
+    if (!newArea) return;
+    await addDoc(collection(db, "areas"), { name: newArea });
+    setLocalAreas([newArea, ...localAreas]);
+    setNewArea("");
+  };
+
+  const deleteArea = async (name) => {
+    const snapshot = await getDocs(collection(db, "areas"));
+    snapshot.forEach(async (docItem) => {
+      if (docItem.data().name === name) {
+        await deleteDoc(doc(db, "areas", docItem.id));
       }
-    }
+    });
+    setLocalAreas(localAreas.filter((a) => a !== name));
   };
 
   const addHole = async () => {
-    if (newHole && !holes.some(hole => hole.name === newHole)) {
-      try {
-        await addDoc(holesCollection, { name: newHole });
-        setNewHole("");
-      } catch (error) {
-        alert("Error adding hole: " + error.message);
+    if (!newHole) return;
+    await addDoc(collection(db, "holes"), { name: newHole });
+    setLocalHoles([newHole, ...localHoles]);
+    setNewHole("");
+  };
+
+  const deleteHole = async (name) => {
+    const snapshot = await getDocs(collection(db, "holes"));
+    snapshot.forEach(async (docItem) => {
+      if (docItem.data().name === name) {
+        await deleteDoc(doc(db, "holes", docItem.id));
       }
-    }
-  };
-
-  const deleteArea = async (id) => {
-    try {
-      await deleteDoc(doc(db, "areas", id));
-    } catch (error) {
-      alert("Error deleting area: " + error.message);
-    }
-  };
-
-  const deleteHole = async (id) => {
-    try {
-      await deleteDoc(doc(db, "holes", id));
-    } catch (error) {
-      alert("Error deleting hole: " + error.message);
-    }
+    });
+    setLocalHoles(localHoles.filter((h) => h !== name));
   };
 
   return (
-    <div style={{ position: "absolute", top: 60, left: 10, background: "white", padding: "10px", border: "1px solid gray", zIndex: 2 }}>
-      <h2>Manage Areas and Holes</h2>
+    <div
+      style={{ ...overlayBase, top: panelPosition.top, left: panelPosition.left }}
+      onMouseMove={onDrag}
+      onMouseUp={stopDrag}
+    >
+      <div style={{ borderRadius: "12px", overflow: "hidden" }}>
+        {/* Header */}
+        <div
+  style={headerBase}
+  onMouseDown={(e) => {
+    e.stopPropagation(); // ✅ don't let it bubble up and break clicks
+    startDrag(e);
+  }}
+  onMouseUp={stopDrag}
+>
 
-      <div>
-        <h3>Area Types</h3>
-        <input
-          type="text"
-          value={newArea}
-          onChange={(e) => setNewArea(e.target.value)}
-          placeholder="New area type"
-        />
-        <button onClick={addArea}>Add Area Type</button>
-        <ul>
-          {areas.map((area) => (
-            <li key={area.id}>
-              {area.name}{" "}
-              <button onClick={() => deleteArea(area.id)}>Delete</button>
-            </li>
-          ))}
-        </ul>
+          <span style={{ fontWeight: "bold", fontSize: "13px", color: "#fff", lineHeight: 1.2 }}>
+            Manage Areas and Holes
+          </span>
+          <button
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#fff",
+              fontSize: "16px",
+              padding: 0,
+              lineHeight: 1,
+              cursor: "pointer"
+            }}
+            onClick={() => setShowManageAreas(false)}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Panel Body */}
+        <div style={{ ...panelBase, padding: "20px", borderTopLeftRadius: 0, borderTopRightRadius: 0, width: "320px", maxHeight: "70vh", overflowY: "auto" }}>
+          <div>
+            <h4 style={{ fontSize: "14px", margin: "10px 0 6px" }}>Areas</h4>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+              <input
+                type="text"
+                value={newArea}
+                onChange={(e) => setNewArea(e.target.value)}
+                placeholder="New area name"
+                style={input}
+              />
+              <button style={{ ...button, backgroundColor: "#27ae60", border: "none" }} onClick={addArea}>Add</button>
+            </div>
+            <ul style={{ listStyle: "none", paddingLeft: "0", marginTop: "6px" }}>
+              {localAreas.map((area, index) => (
+                <li key={index} style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                  {area}
+                  <button
+                    style={{ ...button, backgroundColor: "#c0392b", border: "none", fontSize: "11px", padding: "2px 6px" }}
+                    onClick={() => deleteArea(area)}
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h4 style={{ fontSize: "14px", margin: "10px 0 6px" }}>Holes</h4>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+              <input
+                type="text"
+                value={newHole}
+                onChange={(e) => setNewHole(e.target.value)}
+                placeholder="New hole number"
+                style={input}
+              />
+              <button style={{ ...button, backgroundColor: "#27ae60", border: "none" }} onClick={addHole}>Add</button>
+            </div>
+            <ul style={{ listStyle: "none", paddingLeft: "0", marginTop: "6px" }}>
+              {localHoles.map((hole, index) => (
+                <li key={index} style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                  {hole}
+                  <button
+                    style={{ ...button, backgroundColor: "#c0392b", border: "none", fontSize: "11px", padding: "2px 6px" }}
+                    onClick={() => deleteHole(hole)}
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </div>
-
-      <div>
-        <h3>Hole Names</h3>
-        <input
-          type="text"
-          value={newHole}
-          onChange={(e) => setNewHole(e.target.value)}
-          placeholder="New hole name"
-        />
-        <button onClick={addHole}>Add Hole</button>
-        <ul>
-          {holes.map((hole) => (
-            <li key={hole.id}>
-              {hole.name}{" "}
-              <button onClick={() => deleteHole(hole.id)}>Delete</button>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <button onClick={() => setShowManageAreas(false)}>Close</button>
     </div>
   );
 };

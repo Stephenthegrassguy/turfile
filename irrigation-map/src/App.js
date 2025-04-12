@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+// Full updated App.js with Current Issues Panel and Filter Panel wired in
+import React, { useState, useEffect, useRef } from "react";
 import './App.css';
 import { useJsApiLoader } from "@react-google-maps/api";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -6,13 +7,13 @@ import { collection, addDoc, deleteDoc, doc, onSnapshot, updateDoc, getDocs } fr
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 import { auth, db, storage } from "./firebase";
-
 import Login from "./Login";
 import MapComponent from "./components/MapComponent";
 import MapItems from "./components/MapItems";
 import PlacementManagement from "./components/PlacementManagement";
 import ManageAreas from "./components/ManageAreas";
-import ControlBar from "./components/ControlBar"; // 👈 NEW
+import ControlBar from "./components/ControlBar";
+import IssuesPanel from "./components/IssuesPanel";
 
 const containerStyle = {
   width: "100vw",
@@ -36,6 +37,8 @@ function App() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [showAddObjectForm, setShowAddObjectForm] = useState(false);
   const [showManageAreas, setShowManageAreas] = useState(false);
+  const [showIssuesPanel, setShowIssuesPanel] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [logDate, setLogDate] = useState("");
   const [logNotes, setLogNotes] = useState("");
   const [logImage, setLogImage] = useState(null);
@@ -47,9 +50,13 @@ function App() {
   const [selectedHole, setSelectedHole] = useState("");
   const [selectedArea, setSelectedArea] = useState("");
 
+  const [filters, setFilters] = useState({ type: [], issue: [], hole: [], area: [] });
+
   const itemsRef = collection(db, "irrigationItems");
   const holesCollection = collection(db, "holes");
   const areasCollection = collection(db, "areas");
+
+  const mapRef = useRef(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -70,11 +77,9 @@ function App() {
     const unsubscribeHoles = onSnapshot(holesCollection, (snapshot) => {
       setHoles(snapshot.docs.map(doc => doc.data().name));
     });
-
     const unsubscribeAreas = onSnapshot(areasCollection, (snapshot) => {
       setAreas(snapshot.docs.map(doc => doc.data().name));
     });
-
     return () => {
       unsubscribeHoles();
       unsubscribeAreas();
@@ -83,7 +88,6 @@ function App() {
 
   const handleMapClick = async (e) => {
     if (!placingType || !itemName || !selectedHole || !selectedArea) return;
-
     const newItem = {
       type: placingType,
       name: itemName,
@@ -96,7 +100,6 @@ function App() {
       status: "working",
       createdAt: new Date()
     };
-
     await addDoc(itemsRef, newItem);
     setPlacingType(null);
     setItemName("");
@@ -107,17 +110,14 @@ function App() {
 
   const handleAddLog = async () => {
     if (!selectedItem || !logDate || !logNotes) return;
-
     setUploading(true);
     let imageUrl = "";
-
     try {
       if (logImage) {
         const imageRef = ref(storage, `logs/${selectedItem.id}/${Date.now()}_${logImage.name}`);
         await uploadBytes(imageRef, logImage);
         imageUrl = await getDownloadURL(imageRef);
       }
-
       const logRef = collection(db, `irrigationItems/${selectedItem.id}/logs`);
       await addDoc(logRef, {
         date: logDate,
@@ -125,7 +125,6 @@ function App() {
         imageUrl,
         createdAt: new Date()
       });
-
       setLogDate("");
       setLogNotes("");
       setLogImage(null);
@@ -137,6 +136,7 @@ function App() {
   };
 
   const handleViewHistory = async () => {
+    if (!selectedItem || !selectedItem.id) return;
     const logRef = collection(db, `irrigationItems/${selectedItem.id}/logs`);
     const logSnap = await getDocs(logRef);
     const logList = logSnap.docs.map(doc => doc.data());
@@ -154,6 +154,13 @@ function App() {
     const newStatus = selectedItem.status === "working" ? "issue" : "working";
     await updateDoc(doc(db, "irrigationItems", selectedItem.id), { status: newStatus });
     setSelectedItem(prev => ({ ...prev, status: newStatus }));
+  };
+
+  const handleFocusItem = (item) => {
+    if (!mapRef.current || !item) return;
+    mapRef.current.panTo(item.position);
+    mapRef.current.setZoom(20);
+    setSelectedItem(item);
   };
 
   const getShapeIcon = (type) => {
@@ -200,15 +207,21 @@ function App() {
   if (!isLoaded) return <div>Loading Map...</div>;
   if (!user) return <Login />;
 
-  const currentIssues = items.filter(item => item.status === "issue");
+  const currentIssues = items.filter(item => item.status === "issue" && item.issue);
 
   return (
     <div>
       <ControlBar
-        onAddObject={() => setShowAddObjectForm(true)}
-        onManageAreas={() => setShowManageAreas(true)}
-        onLogout={() => signOut(auth)}
-      />
+   mapItems={items}
+   setSelectedItem={setSelectedItem}
+   setMapZoom={(zoom) => mapRef.current.setZoom(zoom)}
+  setMapCenter={(pos) => mapRef.current.panTo(pos)}
+  onAddObject={() => setShowAddObjectForm(true)}
+  onManageAreas={() => setShowManageAreas(true)}
+  onShowIssuesPanel={() => setShowIssuesPanel(true)}
+  onLogout={() => signOut(auth)}
+  />
+
 
       {showAddObjectForm && (
         <PlacementManagement
@@ -234,21 +247,19 @@ function App() {
         />
       )}
 
-      {currentIssues.length > 0 && (
-        <div style={{ position: "absolute", bottom: 10, left: 10, background: "white", padding: "10px", border: "1px solid red", zIndex: 2 }}>
-          <h4 style={{ margin: 0 }}>Current Issues:</h4>
-          <ul>
-            {currentIssues.map(item => (
-              <li key={item.id}>{item.name}</li>
-            ))}
-          </ul>
-        </div>
+      {showIssuesPanel && (
+        <IssuesPanel
+          issues={currentIssues}
+          onFocusItem={handleFocusItem}
+          onClose={() => setShowIssuesPanel(false)}
+        />
       )}
 
       <MapComponent
         center={center}
         containerStyle={containerStyle}
         onMapClick={handleMapClick}
+        mapRef={mapRef}
       >
         <MapItems
           items={items}

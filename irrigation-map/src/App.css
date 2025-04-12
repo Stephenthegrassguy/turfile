@@ -85,3 +85,29 @@ input:checked + .slider::before {
   content: "✅";
   transform: translateX(0);
 }
+
+input::placeholder {
+  color: white;
+  opacity: 1;
+}
+.gm-style-iw {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  border-radius: 0px !important;
+}
+
+.gm-style-iw-d {
+  overflow: visible !important;
+  padding: 0 !important;
+  background-color: transparent !important;
+}
+
+.gm-style-iw-tc::after {
+  display: none !important;
+}
+
+.gm-ui-hover-effect {
+  display: none !important;
+}
