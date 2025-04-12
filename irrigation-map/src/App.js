@@ -1,4 +1,3 @@
-// irrigation-map/src/App.js
 import React, { useState, useEffect } from "react";
 import './App.css';
 import { useJsApiLoader } from "@react-google-maps/api";
@@ -11,9 +10,9 @@ import { auth, db, storage } from "./firebase";
 import Login from "./Login";
 import MapComponent from "./components/MapComponent";
 import MapItems from "./components/MapItems";
-import LogManagement from "./components/LogManagement";
 import PlacementManagement from "./components/PlacementManagement";
 import ManageAreas from "./components/ManageAreas";
+import ControlBar from "./components/ControlBar"; // 👈 NEW
 
 const containerStyle = {
   width: "100vw",
@@ -44,16 +43,13 @@ function App() {
   const [uploading, setUploading] = useState(false);
 
   const [holes, setHoles] = useState([]);
-  const [areaTypes, setAreaTypes] = useState([]);
-  const [areasByHole, setAreasByHole] = useState({});
+  const [areas, setAreas] = useState([]);
   const [selectedHole, setSelectedHole] = useState("");
   const [selectedArea, setSelectedArea] = useState("");
-  const [manageHoleName, setManageHoleName] = useState("");
-  const [manageAreaType, setManageAreaType] = useState("");
-  const [expandedHole, setExpandedHole] = useState(null);
 
   const itemsRef = collection(db, "irrigationItems");
   const holesCollection = collection(db, "holes");
+  const areasCollection = collection(db, "areas");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -71,16 +67,18 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(holesCollection, (snapshot) => {
-      const holesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setHoles(holesData.map(h => h.name));
-      const areasData = holesData.reduce((acc, hole) => {
-        acc[hole.name] = hole.areas || [];
-        return acc;
-      }, {});
-      setAreasByHole(areasData);
+    const unsubscribeHoles = onSnapshot(holesCollection, (snapshot) => {
+      setHoles(snapshot.docs.map(doc => doc.data().name));
     });
-    return () => unsubscribe();
+
+    const unsubscribeAreas = onSnapshot(areasCollection, (snapshot) => {
+      setAreas(snapshot.docs.map(doc => doc.data().name));
+    });
+
+    return () => {
+      unsubscribeHoles();
+      unsubscribeAreas();
+    };
   }, []);
 
   const handleMapClick = async (e) => {
@@ -199,63 +197,6 @@ function App() {
     }
   };
 
-  const addHole = async (holeName) => {
-    if (!holes.includes(holeName)) {
-      try {
-        await addDoc(holesCollection, { name: holeName, areas: [] });
-      } catch (error) {
-        alert("Error adding hole: ", error.message);
-      }
-      setManageHoleName('');
-    }
-  };
-
-  const addAreaType = (areaType) => {
-    if (!areaTypes.includes(areaType)) {
-      setAreaTypes([...areaTypes, areaType]);
-      setManageAreaType('');
-    }
-  };
-
-  const toggleAreaForHole = async (holeName, areaType) => {
-    const holeDoc = holes.find(h => h.name === holeName);
-    if (holeDoc) {
-      const updatedAreas = areasByHole[holeName].includes(areaType)
-        ? areasByHole[holeName].filter(a => a !== areaType)
-        : [...areasByHole[holeName], areaType];
-
-      setAreasByHole(prev => ({
-        ...prev,
-        [holeName]: updatedAreas
-      }));
-
-      try {
-        await updateDoc(doc(db, "holes", holeDoc.id), { areas: updatedAreas });
-      } catch (error) {
-        alert("Error updating areas: ", error.message);
-      }
-    }
-  };
-
-  const removeHole = async (holeName) => {
-    const holeDoc = holes.find(h => h.name === holeName);
-    if (holeDoc) {
-      try {
-        await deleteDoc(doc(db, "holes", holeDoc.id));
-      } catch (error) {
-        alert("Error removing hole: ", error.message);
-      }
-    }
-  };
-
-  const removeAreaType = (areaType) => {
-    setAreaTypes(areaTypes.filter(a => a !== areaType));
-    setAreasByHole(Object.keys(areasByHole).reduce((acc, hole) => ({
-      ...acc,
-      [hole]: areasByHole[hole].filter(a => a !== areaType)
-    }), {}));
-  };
-
   if (!isLoaded) return <div>Loading Map...</div>;
   if (!user) return <Login />;
 
@@ -263,10 +204,11 @@ function App() {
 
   return (
     <div>
-      <div style={{ position: "absolute", top: 10, left: 10, zIndex: 1 }}>
-        <button onClick={() => setShowAddObjectForm(true)}>Add Object</button>
-        <button onClick={() => setShowManageAreas(true)}>Manage Areas</button>
-      </div>
+      <ControlBar
+        onAddObject={() => setShowAddObjectForm(true)}
+        onManageAreas={() => setShowManageAreas(true)}
+        onLogout={() => signOut(auth)}
+      />
 
       {showAddObjectForm && (
         <PlacementManagement
@@ -279,7 +221,7 @@ function App() {
           setSelectedHole={setSelectedHole}
           selectedArea={selectedArea}
           setSelectedArea={setSelectedArea}
-          areasByHole={areasByHole}
+          areas={areas}
           setShowAddObjectForm={setShowAddObjectForm}
         />
       )}
@@ -287,26 +229,10 @@ function App() {
       {showManageAreas && (
         <ManageAreas
           holes={holes}
-          areaTypes={areaTypes}
-          manageAreaType={manageAreaType}
-          setManageAreaType={setManageAreaType}
-          addAreaType={addAreaType}
-          manageHoleName={manageHoleName}
-          setManageHoleName={setManageHoleName}
-          addHole={addHole}
-          setExpandedHole={setExpandedHole}
-          expandedHole={expandedHole}
-          removeHole={removeHole}
-          removeAreaType={removeAreaType}
-          areasByHole={areasByHole}
-          toggleAreaForHole={toggleAreaForHole}
+          areas={areas}
           setShowManageAreas={setShowManageAreas}
         />
       )}
-
-      <div style={{ position: "absolute", top: 10, right: 10, zIndex: 1 }}>
-        <button onClick={() => signOut(auth)}>Logout</button>
-      </div>
 
       {currentIssues.length > 0 && (
         <div style={{ position: "absolute", bottom: 10, left: 10, background: "white", padding: "10px", border: "1px solid red", zIndex: 2 }}>
@@ -333,24 +259,17 @@ function App() {
           toggleStatus={toggleStatus}
           confirmAndDelete={confirmAndDelete}
           handleViewHistory={handleViewHistory}
-        />
-      </MapComponent>
-
-      {selectedItem && (
-        <LogManagement
+          handleAddLog={handleAddLog}
           logs={logs}
           logDate={logDate}
-          logNotes={logNotes}
-          logImage={logImage}
-          selectedItem={selectedItem}
-          handleAddLog={handleAddLog}
-          handleViewHistory={handleViewHistory}
           setLogDate={setLogDate}
+          logNotes={logNotes}
           setLogNotes={setLogNotes}
+          logImage={logImage}
           setLogImage={setLogImage}
           uploading={uploading}
         />
-      )}
+      </MapComponent>
     </div>
   );
 }

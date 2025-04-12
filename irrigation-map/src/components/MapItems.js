@@ -1,6 +1,7 @@
 // irrigation-map/src/components/MapItems.js
 import React from "react";
-import { Marker, InfoWindow } from "@react-google-maps/api";
+import { Marker } from "@react-google-maps/api";
+import LogManagement from "./LogManagement";
 
 const MapItems = ({
   items,
@@ -10,7 +11,16 @@ const MapItems = ({
   setLogs,
   toggleStatus,
   confirmAndDelete,
-  handleViewHistory
+  handleViewHistory,
+  handleAddLog,
+  logs,
+  logDate,
+  setLogDate,
+  logNotes,
+  setLogNotes,
+  logImage,
+  setLogImage,
+  uploading
 }) => (
   <>
     {items.map(item => (
@@ -20,7 +30,7 @@ const MapItems = ({
         icon={getShapeIcon(item.type)}
         onClick={() => {
           setSelectedItem(item);
-          setLogs([]);
+          setLogs([]); // Clear previous logs when selecting a new item
         }}
         label={{
           text: item.name || "",
@@ -29,30 +39,25 @@ const MapItems = ({
         }}
       />
     ))}
-    
+
     {selectedItem && (
-      <InfoWindow
+      <LogManagement
         position={selectedItem.position}
-        onCloseClick={() => setSelectedItem(null)}
-      >
-        <div style={{ maxWidth: "300px" }}>
-          <p><strong>{selectedItem.name}</strong></p>
-          <p>Type: {selectedItem.type}</p>
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <span style={{ marginRight: 8 }}>Status:</span>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={selectedItem.status === "working"}
-                onChange={toggleStatus}
-              />
-              <span className="slider round"></span>
-            </label>
-          </div>
-          <button onClick={confirmAndDelete} style={{ marginTop: 10 }}>Delete</button>
-          <button onClick={handleViewHistory} style={{ marginLeft: "8px" }}>View History</button>
-        </div>
-      </InfoWindow>
+        onClose={() => setSelectedItem(null)}
+        selectedItem={selectedItem}
+        toggleStatus={toggleStatus}
+        confirmAndDelete={confirmAndDelete}
+        handleAddLog={handleAddLog}
+        handleViewHistory={handleViewHistory}
+        logs={logs}
+        logDate={logDate}
+        setLogDate={setLogDate}
+        logNotes={logNotes}
+        setLogNotes={setLogNotes}
+        logImage={logImage}
+        setLogImage={setLogImage}
+        uploading={uploading}
+      />
     )}
   </>
 );
