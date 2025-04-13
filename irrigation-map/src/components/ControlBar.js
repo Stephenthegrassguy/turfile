@@ -9,7 +9,8 @@ const ControlBar = ({
   mapItems,
   setSelectedItem,
   setMapZoom,
-  setMapCenter
+  setMapCenter,
+  onShowInventoryPanel
 }) => {
   const styles = {
     wrapper: {
@@ -79,6 +80,7 @@ const ControlBar = ({
 
           <button style={styles.button} onClick={onAddObject}>Add Object</button>
           <button style={styles.button} onClick={onManageAreas}>Manage Areas</button>
+          <button style={styles.button} onClick={onShowInventoryPanel}>Head Inventory</button>
           <button style={styles.button} onClick={onShowIssuesPanel}>Current Issues</button>
           <button style={{ ...styles.button, marginTop: "auto" }} onClick={onLogout}>Logout</button>
         </div>

@@ -5,6 +5,7 @@ import LogManagement from "./LogManagement";
 
 const MapItems = ({
   items,
+  mapZoom,
   selectedItem,
   setSelectedItem,
   getShapeIcon,
@@ -27,14 +28,14 @@ const MapItems = ({
       <Marker
         key={item.id}
         position={item.position}
-        icon={getShapeIcon(item.type)}
+        icon={getShapeIcon(item.type, mapZoom)}
         onClick={() => {
           setSelectedItem(item);
           setLogs([]); // Clear previous logs when selecting a new item
         }}
         label={{
           text: item.name || "",
-          fontSize: "10px",
+          fontSize: "11px",
           fontWeight: "bold",
           color: "#FFFFFF"
         }}

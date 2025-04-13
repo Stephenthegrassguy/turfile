@@ -6,7 +6,8 @@ const MapComponent = ({
   containerStyle,
   onMapClick,
   children,
-  mapRef // 👈 receive the mapRef from parent
+  mapRef, // 👈 receive the mapRef from parent
+  onZoomChanged
 }) => {
   const handleLoad = useCallback((map) => {
     if (mapRef) {
@@ -18,7 +19,7 @@ const MapComponent = ({
     <GoogleMap
       mapContainerStyle={containerStyle}
       center={center}
-      zoom={18}
+      zoom={19}
       onClick={onMapClick}
       onLoad={handleLoad} // 👈 capture the map instance
       options={{
@@ -30,6 +31,7 @@ const MapComponent = ({
         mapTypeControl: false,
         fullscreenControl: false
       }}
+      onZoomChanged={onZoomChanged}
     >
       {children}
     </GoogleMap>

@@ -1,4 +1,4 @@
-// Full updated App.js with Current Issues Panel and Filter Panel wired in
+// ✅ Full App.js (Updated for Placement Mode)
 import React, { useState, useEffect, useRef } from "react";
 import './App.css';
 import { useJsApiLoader } from "@react-google-maps/api";
@@ -14,6 +14,7 @@ import PlacementManagement from "./components/PlacementManagement";
 import ManageAreas from "./components/ManageAreas";
 import ControlBar from "./components/ControlBar";
 import IssuesPanel from "./components/IssuesPanel";
+import HeadInventory from "./components/HeadInventory";
 
 const containerStyle = {
   width: "100vw",
@@ -21,8 +22,8 @@ const containerStyle = {
 };
 
 const center = {
-  lat: 49.2117,
-  lng: -123.1554
+  lat: 49.214167,
+  lng: -123.161944
 };
 
 function App() {
@@ -38,23 +39,19 @@ function App() {
   const [showAddObjectForm, setShowAddObjectForm] = useState(false);
   const [showManageAreas, setShowManageAreas] = useState(false);
   const [showIssuesPanel, setShowIssuesPanel] = useState(false);
-  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showInventoryPanel, setShowInventoryPanel] = useState(false);
+
   const [logDate, setLogDate] = useState("");
   const [logNotes, setLogNotes] = useState("");
   const [logImage, setLogImage] = useState(null);
   const [logs, setLogs] = useState([]);
   const [uploading, setUploading] = useState(false);
-
+  const [mapZoom, setMapZoom] = useState(18);
   const [holes, setHoles] = useState([]);
   const [areas, setAreas] = useState([]);
+
   const [selectedHole, setSelectedHole] = useState("");
   const [selectedArea, setSelectedArea] = useState("");
-
-  const [filters, setFilters] = useState({ type: [], issue: [], hole: [], area: [] });
-
-  const itemsRef = collection(db, "irrigationItems");
-  const holesCollection = collection(db, "holes");
-  const areasCollection = collection(db, "areas");
 
   const mapRef = useRef(null);
 
@@ -66,7 +63,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(itemsRef, (snapshot) => {
+    const unsubscribe = onSnapshot(collection(db, "irrigationItems"), (snapshot) => {
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setItems(data);
     });
@@ -74,10 +71,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const unsubscribeHoles = onSnapshot(holesCollection, (snapshot) => {
+    const unsubscribeHoles = onSnapshot(collection(db, "holes"), (snapshot) => {
       setHoles(snapshot.docs.map(doc => doc.data().name));
     });
-    const unsubscribeAreas = onSnapshot(areasCollection, (snapshot) => {
+    const unsubscribeAreas = onSnapshot(collection(db, "areas"), (snapshot) => {
       setAreas(snapshot.docs.map(doc => doc.data().name));
     });
     return () => {
@@ -100,7 +97,7 @@ function App() {
       status: "working",
       createdAt: new Date()
     };
-    await addDoc(itemsRef, newItem);
+    await addDoc(collection(db, "irrigationItems"), newItem);
     setPlacingType(null);
     setItemName("");
     setSelectedHole("");
@@ -163,14 +160,15 @@ function App() {
     setSelectedItem(item);
   };
 
-  const getShapeIcon = (type) => {
-    const size = 10;
+  const getShapeIcon = (type, zoom = 18) => {
+    const scaleFactor = Math.pow(zoom, 1.4) / 8;
     if (!window.google) return null;
+
     switch (type) {
       case "head":
         return {
           path: window.google.maps.SymbolPath.CIRCLE,
-          scale: size,
+          scale: scaleFactor,
           fillColor: "blue",
           fillOpacity: 1,
           strokeWeight: 0
@@ -181,7 +179,7 @@ function App() {
           fillColor: "red",
           fillOpacity: 1,
           strokeWeight: 0,
-          scale: 1
+          scale: scaleFactor
         };
       case "satellite":
         return {
@@ -189,7 +187,7 @@ function App() {
           fillColor: "green",
           fillOpacity: 1,
           strokeWeight: 0,
-          scale: 1
+          scale: scaleFactor
         };
       case "splice box":
         return {
@@ -197,7 +195,7 @@ function App() {
           fillColor: "purple",
           fillOpacity: 1,
           strokeWeight: 0,
-          scale: 1
+          scale: scaleFactor
         };
       default:
         return null;
@@ -212,16 +210,16 @@ function App() {
   return (
     <div>
       <ControlBar
-   mapItems={items}
-   setSelectedItem={setSelectedItem}
-   setMapZoom={(zoom) => mapRef.current.setZoom(zoom)}
-  setMapCenter={(pos) => mapRef.current.panTo(pos)}
-  onAddObject={() => setShowAddObjectForm(true)}
-  onManageAreas={() => setShowManageAreas(true)}
-  onShowIssuesPanel={() => setShowIssuesPanel(true)}
-  onLogout={() => signOut(auth)}
-  />
-
+        mapItems={items}
+        setSelectedItem={setSelectedItem}
+        setMapZoom={(zoom) => mapRef.current.setZoom(zoom)}
+        setMapCenter={(pos) => mapRef.current.panTo(pos)}
+        onAddObject={() => setShowAddObjectForm(true)}
+        onManageAreas={() => setShowManageAreas(true)}
+        onShowIssuesPanel={() => setShowIssuesPanel(true)}
+        onLogout={() => signOut(auth)}
+        onShowInventoryPanel={() => setShowInventoryPanel(true)}
+      />
 
       {showAddObjectForm && (
         <PlacementManagement
@@ -260,9 +258,27 @@ function App() {
         containerStyle={containerStyle}
         onMapClick={handleMapClick}
         mapRef={mapRef}
+        onLoad={(map) => (mapRef.current = map)}
+        onZoomChanged={() => {
+          if (mapRef.current) {
+            setMapZoom(mapRef.current.getZoom());
+          }
+        }}
       >
+        {showInventoryPanel && (
+  <HeadInventory
+    holes={holes}
+    areas={areas}
+    onClose={() => setShowInventoryPanel(false)}
+    mapRef={mapRef} // ✅ already passed
+    setSelectedItem={setSelectedItem} // ✅ add this line
+  />
+)}
+
+
         <MapItems
           items={items}
+          mapZoom={mapZoom}
           selectedItem={selectedItem}
           setSelectedItem={setSelectedItem}
           getShapeIcon={getShapeIcon}
