@@ -1,6 +1,6 @@
-// Updated MapItems.js
+// ✅ Updated MapItems.js with Pulsating OverlayView for selected item and label suppression
 import React from "react";
-import { Marker } from "@react-google-maps/api";
+import { Marker, OverlayView } from "@react-google-maps/api";
 import LogManagement from "./LogManagement";
 
 const MapItems = ({
@@ -33,14 +33,28 @@ const MapItems = ({
           setSelectedItem(item);
           setLogs([]); // Clear previous logs when selecting a new item
         }}
-        label={{
-          text: item.name || "",
-          fontSize: "11px",
-          fontWeight: "bold",
-          color: "#FFFFFF"
-        }}
+        label={
+          selectedItem?.id === item.id
+            ? undefined // hide label for selected item
+            : {
+                text: item.name || "",
+                fontSize: "11px",
+                fontWeight: "bold",
+                color: "#FFFFFF"
+              }
+        }
       />
     ))}
+
+    {/* Pulsating dot overlay for selected item */}
+    {selectedItem && selectedItem.position && (
+      <OverlayView
+        position={selectedItem.position}
+        mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+      >
+        <div className="pulsating-dot" />
+      </OverlayView>
+    )}
 
     {selectedItem && (
       <LogManagement

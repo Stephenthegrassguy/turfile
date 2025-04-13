@@ -43,7 +43,7 @@ function App() {
 
   const [logDate, setLogDate] = useState("");
   const [logNotes, setLogNotes] = useState("");
-  const [logImage, setLogImage] = useState(null);
+  const [logImage, setLogImage] = useState([]);
   const [logs, setLogs] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [mapZoom, setMapZoom] = useState(18);
@@ -108,38 +108,53 @@ function App() {
   const handleAddLog = async () => {
     if (!selectedItem || !logDate || !logNotes) return;
     setUploading(true);
-    let imageUrl = "";
+    let imageUrls = [];
+  
     try {
-      if (logImage) {
-        const imageRef = ref(storage, `logs/${selectedItem.id}/${Date.now()}_${logImage.name}`);
-        await uploadBytes(imageRef, logImage);
-        imageUrl = await getDownloadURL(imageRef);
+      if (logImage.length > 0) {
+        const uploadPromises = logImage.map(file => {
+          const imageRef = ref(storage, `logs/${selectedItem.id}/${Date.now()}_${file.name}`);
+          return uploadBytes(imageRef, file).then(() => getDownloadURL(imageRef));
+        });
+        imageUrls = await Promise.all(uploadPromises);
       }
+  
       const logRef = collection(db, `irrigationItems/${selectedItem.id}/logs`);
       await addDoc(logRef, {
         date: logDate,
         notes: logNotes,
-        imageUrl,
+        imageUrls,
         createdAt: new Date()
       });
+  
       setLogDate("");
       setLogNotes("");
-      setLogImage(null);
+      setLogImage([]);
     } catch (err) {
       alert("Error uploading image: " + err.message);
     } finally {
       setUploading(false);
     }
   };
+  
 
   const handleViewHistory = async () => {
     if (!selectedItem || !selectedItem.id) return;
+  
     const logRef = collection(db, `irrigationItems/${selectedItem.id}/logs`);
     const logSnap = await getDocs(logRef);
-    const logList = logSnap.docs.map(doc => doc.data());
-    setLogs(logList.sort((a, b) => new Date(b.date) - new Date(a.date)));
+  
+    const logList = logSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  
+    setLogs(
+      logList.sort((a, b) => {
+        const aTime = a.createdAt?.toDate?.() ?? new Date(a.date);
+        const bTime = b.createdAt?.toDate?.() ?? new Date(b.date);
+        return bTime - aTime; // Newest first
+      })
+    );
   };
-
+  
   const confirmAndDelete = async () => {
     if (window.confirm("Are you sure you want to delete this item? All logs and data will be permanently removed.")) {
       await deleteDoc(doc(db, "irrigationItems", selectedItem.id));

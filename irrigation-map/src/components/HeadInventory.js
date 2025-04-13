@@ -1,4 +1,4 @@
-// ✅ HeadInventory.js (Toggle switch added for Placement Mode + Click to zoom + show InfoWindow)
+// ✅ Cleaned HeadInventory.js
 import React, { useState, useEffect } from "react";
 import { collection, onSnapshot, addDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
@@ -9,7 +9,6 @@ import {
   panelBase,
   draggableHeader,
   button,
-  input,
   select
 } from "../styles/PanelStyles";
 
@@ -78,11 +77,13 @@ const HeadInventory = ({ holes, areas, onClose, mapRef, setSelectedItem }) => {
       setItems(data);
     });
     return () => unsubscribe();
-  }, []);
+  }, [itemsRef]);
 
   useEffect(() => {
+    const mapInstance = mapRef?.current;
+
     const handleMapClick = async (e) => {
-      if (!placingHead || !mapRef?.current) return;
+      if (!placingHead || !mapInstance) return;
       const lat = e.latLng.lat();
       const lng = e.latLng.lng();
       const headRef = doc(db, "irrigationItems", placingHead.id);
@@ -90,13 +91,13 @@ const HeadInventory = ({ holes, areas, onClose, mapRef, setSelectedItem }) => {
       setPlacingHead(null);
     };
 
-    if (mapRef?.current && isPlacingMode) {
-      mapRef.current.addListener("click", handleMapClick);
+    if (mapInstance && isPlacingMode) {
+      mapInstance.addListener("click", handleMapClick);
     }
 
     return () => {
-      if (mapRef?.current) {
-        window.google.maps.event.clearListeners(mapRef.current, "click");
+      if (mapInstance) {
+        window.google.maps.event.clearListeners(mapInstance, "click");
       }
     };
   }, [placingHead, isPlacingMode, mapRef]);

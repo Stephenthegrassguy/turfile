@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { GoogleMap } from "@react-google-maps/api";
 
 const MapComponent = ({

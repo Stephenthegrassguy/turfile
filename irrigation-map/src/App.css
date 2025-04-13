@@ -111,3 +111,26 @@ input::placeholder {
 .gm-ui-hover-effect {
   display: none !important;
 }
+.pulsating-dot {
+  width: 20px;
+  height: 20px;
+  background-color: #0033cc; /* Darker blue */
+  border-radius: 50%;
+  box-shadow: 0 0 0 0 #0033cc;
+  animation: pulse 1.5s infinite;
+  transform: translate(-50%, -50%);
+  position: absolute;
+  z-index: 10;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 #0033cc;
+  }
+  70% {
+    box-shadow: 0 0 0 15px rgba(0, 51, 204, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 #0033cc;
+  }
+}

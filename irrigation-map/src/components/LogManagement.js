@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { InfoWindow } from "@react-google-maps/api";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, deleteDoc, collection, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 import {
@@ -51,7 +51,8 @@ const LogManagement = ({
   const toggleStatus = async (itemId, issueType = null) => {
     try {
       const itemRef = doc(db, "irrigationItems", itemId);
-
+  
+      // Update item status in Firestore
       if (issueType) {
         await updateDoc(itemRef, {
           issue: { type: issueType, active: true },
@@ -63,19 +64,50 @@ const LogManagement = ({
           status: "working"
         });
       }
-
+  
+      // Add to logs
+      const logRef = collection(db, `irrigationItems/${itemId}/logs`);
+      const today = new Date().toISOString().split("T")[0];
+      const logNote = issueType
+        ? `Marked as issue: ${issueType}`
+        : "Issue resolved";
+  
+      await addDoc(logRef, {
+        date: today,
+        notes: logNote,
+        imageUrls: [],
+        createdAt: new Date()
+      });
+  
+      // Update UI
       setSelectedItem((prev) => ({
         ...prev,
         issue: { type: issueType || "", active: !!issueType },
         status: issueType ? "issue" : "working"
       }));
-
+  
       await refreshSelectedItem(itemId);
     } catch (error) {
-      console.error("Error updating issue status:", error);
+      console.error("Error updating issue status or logging:", error);
     }
   };
-
+  
+  const handleDeleteLog = async () => {
+    if (!selectedItem || !selectedLog) return;
+  
+    if (window.confirm("Are you sure you want to delete this log?")) {
+      try {
+        const logRef = doc(db, `irrigationItems/${selectedItem.id}/logs`, selectedLog.id);
+        await deleteDoc(logRef);
+        setSelectedLog(null);
+        await handleViewHistory(); // refresh the list
+      } catch (error) {
+        console.error("Error deleting log:", error);
+        alert("Failed to delete the log.");
+      }
+    }
+  };
+  
   return (
     <>
       <InfoWindow
@@ -84,11 +116,11 @@ const LogManagement = ({
         options={{
           disableAutoPan: true,
           pixelOffset: new window.google.maps.Size(0, -35),
-          closeBoxURL: "", // Hides default close button
+          closeBoxURL: "",
         }}
       >
         <div style={styles.wrapper}>
-          <div style={{ borderRadius: "12px", overflow: "hidden", maxWidth: "280px" }}>
+        <div style={{ width: "250px", borderRadius: "12px", overflow: "hidden" }}>
             <div style={headerBase}>
               <span style={{ fontWeight: "bold", fontSize: "13px", color: "#fff" }}>
                 {selectedItem.name}
@@ -113,58 +145,61 @@ const LogManagement = ({
               <p style={styles.text}>Hole: {selectedItem.hole}</p>
               <p style={styles.text}>Area: {selectedItem.area}</p>
 
-              <div style={{ ...styles.text, marginTop: "10px" }}>
-                <strong>Status:</strong>{" "}
-                {selectedItem.issue?.active ? (
-                  <>
-                    <span style={{ color: "#e74c3c" }}>{selectedItem.issue.type}</span>
-                    <button
-                      style={{ ...button, marginLeft: "8px" }}
-                      onClick={() => toggleStatus(selectedItem.id, null)}
-                    >
-                      Issue Solved
-                    </button>
-                  </>
-                ) : !showIssueForm ? (
-                  <button
-                    onClick={() => setShowIssueForm(true)}
-                    style={{ ...button, marginLeft: "8px" }}
-                  >
-                    Make an Issue
-                  </button>
-                ) : (
-                  <div style={{ marginTop: "8px" }}>
-                    <select
-                      style={select}
-                      value={issueType}
-                      onChange={(e) => setIssueType(e.target.value)}
-                    >
-                      <option value="">Select Issue</option>
-                      <option value="Needs level">Needs level</option>
-                      <option value="Electrical Issue">Electrical Issue</option>
-                      <option value="Weeping">Weeping</option>
-                      <option value="Stuck on">Stuck on</option>
-                      <option value="Stuck off">Stuck off</option>
-                      <option value="Broken">Broken</option>
-                      <option value="Coverage issue">Coverage issue</option>
-                    </select>
-                    <button
-                      style={{ ...button, marginTop: "6px" }}
-                      onClick={async () => {
-                        await toggleStatus(selectedItem.id, issueType);
-                        setShowIssueForm(false);
-                        setIssueType("");
-                      }}
-                    >
-                      Add
-                    </button>
-                  </div>
-                )}
-              </div>
+              {!showLogForm && !viewHistory && (
+  <div style={styles.statusRow}>
+    <span style={{ fontWeight: "bold", color: "#fff", fontSize: "13px" }}>Status:</span>
+    {selectedItem.issue?.active ? (
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <span style={{ color: "#e74c3c", fontSize: "13px" }}>{selectedItem.issue.type}</span>
+      <button
+        style={button}
+        onClick={() => toggleStatus(selectedItem.id, null)}
+      >
+        Issue Solved
+      </button>
+    </div>
+    
+    ) : !showIssueForm ? (
+      <button
+        onClick={() => setShowIssueForm(true)}
+        style={{ ...button, marginLeft: "8px" }}
+      >
+        Make an Issue
+      </button>
+    ) : (
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <select
+          style={select}
+          value={issueType}
+          onChange={(e) => setIssueType(e.target.value)}
+        >
+          <option value="">Select Issue</option>
+          <option value="Needs level">Needs level</option>
+          <option value="Electrical Issue">Electrical Issue</option>
+          <option value="Weeping">Weeping</option>
+          <option value="Stuck on">Stuck on</option>
+          <option value="Stuck off">Stuck off</option>
+          <option value="Broken">Broken</option>
+          <option value="Coverage issue">Coverage issue</option>
+        </select>
+        <button
+          style={button}
+          onClick={async () => {
+            await toggleStatus(selectedItem.id, issueType);
+            setShowIssueForm(false);
+            setIssueType("");
+          }}
+        >
+          Add
+        </button>
+      </div>
+    )}
+  </div>
+)}
 
               {!viewHistory ? (
                 showLogForm ? (
-                  <form onSubmit={handleFormSubmit} style={{ marginTop: "10px" }}>
+                  <form onSubmit={handleFormSubmit} style={styles.logForm}>
                     <input
                       type="date"
                       value={logDate}
@@ -179,79 +214,115 @@ const LogManagement = ({
                       required
                       style={styles.textarea}
                     />
-                    <input
-                      type="file"
-                      onChange={(e) => setLogImage(e.target.files[0])}
-                      style={input}
-                    />
-                    <div style={{ marginTop: "10px" }}>
+                    <label htmlFor="fileUpload" style={{ ...button, display: "inline-block", textAlign: "center" }}>
+  {logImage.length > 0 ? `Files selected (${logImage.length})` : "Choose Files"}
+  <input
+    type="file"
+    id="fileUpload"
+    multiple
+    onChange={(e) => setLogImage(prev => [...prev, ...Array.from(e.target.files)])}
+    style={styles.fileInput}
+  />
+</label>
+
+
+                    {logImage.length > 0 && (
+  <div style={styles.imagePreviewContainer}>
+    {logImage.map((file, i) => (
+      <div key={i} style={styles.thumbWrapper}>
+        <img
+          src={URL.createObjectURL(file)}
+          alt={`thumb-${i}`}
+          style={styles.thumb}
+        />
+        <button
+          onClick={() =>
+            setLogImage((prev) => prev.filter((_, index) => index !== i))
+          }
+          style={styles.removeButton}
+        >
+          ✕
+        </button>
+      </div>
+    ))}
+  </div>
+)}
+
+
+                    <div style={styles.logFormButtons}>
                       <button type="submit" disabled={uploading} style={button}>Submit Log</button>
                       <button type="button" onClick={() => setShowLogForm(false)} style={button}>Cancel</button>
                     </div>
                   </form>
                 ) : (
-                  <div style={{ marginTop: "10px" }}>
+                  <div style={styles.buttonGroup}>
                     <button onClick={() => setShowLogForm(true)} style={button}>Add Log</button>
                     <button onClick={handleViewHistoryClick} style={button}>View History</button>
+                    <button onClick={confirmAndDelete} style={{ ...button, backgroundColor: "#c0392b" }}>Delete</button>
                   </div>
                 )
               ) : (
                 <div style={{ marginTop: "10px" }}>
                   <button onClick={() => setViewHistory(false)} style={button}>← Back</button>
-                  <ul style={{ maxHeight: "150px", overflowY: "auto", paddingLeft: "16px" }}>
-                    {Array.isArray(logs) && logs.length > 0 ? (
-                      logs.map((log, index) => (
-                        <li
-                          key={index}
-                          style={styles.logItem}
-                          onClick={() => setSelectedLog(log)}
-                        >
-                          <strong>{log.date}</strong>
-                          <p style={{ margin: 0, fontSize: "12px", color: "#ccc" }}>
-                            {log.notes.slice(0, 30)}{log.notes.length > 30 ? "..." : ""}
-                          </p>
-                          {log.imageUrl && (
-                            <img
-                              src={log.imageUrl}
-                              alt="thumb"
-                              style={styles.thumb}
-                            />
-                          )}
-                        </li>
-                      ))
-                    ) : (
-                      <li style={styles.text}>No logs found.</li>
-                    )}
-                  </ul>
+                  <div style={styles.logList}>
+  {Array.isArray(logs) && logs.length > 0 ? (
+    logs.map((log, index) => (
+      <div
+        key={index}
+        style={styles.logRow}
+        onClick={() => setSelectedLog(log)}
+      >
+        <div style={styles.logText}>
+          <strong>{log.date}</strong>
+          <p style={{ margin: 0, fontSize: "12px", color: "#ccc" }}>
+            {log.notes.slice(0, 40)}{log.notes.length > 40 ? "..." : ""}
+          </p>
+        </div>
+        {log.imageUrls?.[0] && (
+          <img
+            src={log.imageUrls[0]}
+            alt="thumb"
+            style={styles.logThumb}
+          />
+        )}
+      </div>
+    ))
+  ) : (
+    <p style={styles.text}>No logs found.</p>
+  )}
+</div>
+
                 </div>
               )}
-
-              <button onClick={confirmAndDelete} style={{ ...button, marginTop: "10px" }}>Delete</button>
             </div>
           </div>
         </div>
       </InfoWindow>
 
       {selectedLog && (
-        <div onClick={() => setSelectedLog(null)} style={styles.modalBackdrop}>
-          <div onClick={(e) => e.stopPropagation()} style={styles.modalContent}>
-            <h3>{selectedLog.date}</h3>
-            <p>{selectedLog.notes}</p>
-            {selectedLog.imageUrl && (
-              <img
-                src={selectedLog.imageUrl}
-                alt="log"
-                style={styles.fullImage}
-              />
-            )}
-            <button style={button} onClick={() => setSelectedLog(null)}>Close</button>
-          </div>
-        </div>
-      )}
+  <div onClick={() => setSelectedLog(null)} style={styles.modalBackdrop}>
+    <div onClick={(e) => e.stopPropagation()} style={styles.modalContent}>
+      <h3>{selectedLog.date}</h3>
+      <p>{selectedLog.notes}</p>
+      {selectedLog.imageUrls?.map((url, i) => (
+        <img key={i} src={url} alt={`log-${i}`} style={styles.fullImage} />
+      ))}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px" }}>
+        <button style={button} onClick={() => setSelectedLog(null)}>Close</button>
+        <button
+          style={{ ...button, backgroundColor: "#c0392b" }}
+          onClick={handleDeleteLog}
+        >
+          Delete Log
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
     </>
   );
 };
-
 const styles = {
   wrapper: {
     display: "flex",
@@ -269,16 +340,85 @@ const styles = {
     color: "#fff",
     marginTop: "6px"
   },
+  statusRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    marginTop: "10px",
+    flexWrap: "wrap" // allows wrapping on smaller screens
+  },  
+  buttonGroup: {
+    marginTop: "10px",
+    display: "flex",
+    justifyContent: "space-between",
+    width: "100%"
+  },
+  logForm: {
+    marginTop: "10px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "10px"
+  },
+  logFormButtons: {
+    display: "flex",
+    justifyContent: "center",
+    gap: "12px",
+    marginTop: "10px"
+  },
+  fileLabel: {
+    backgroundColor: "#333",
+    color: "#fff",
+    padding: "8px 12px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "13px"
+  },
+  fileInput: {
+    display: "none"
+  },
+  imagePreviewContainer: {
+    display: "flex",
+    gap: "6px",
+    flexWrap: "wrap",
+    marginTop: "6px",
+    justifyContent: "center"
+  },
+  thumbWrapper: {
+    position: "relative",
+    width: "50px",
+    height: "50px",
+    borderRadius: "4px",
+    overflow: "visible", // <--- change from 'hidden' to 'visible'
+    border: "1px solid #555"
+  },  
+  thumb: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block"
+  },
+  removeButton: {
+    position: "absolute",
+    top: "-8px",        // higher up
+    right: "-8px",      // shift outside corner
+    backgroundColor: "#c0392b",
+    color: "#fff",
+    border: "2px solid #111", // contrast outline
+    borderRadius: "50%",
+    width: "18px",
+    height: "18px",
+    fontSize: "12px",
+    fontWeight: "bold",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 0 4px rgba(0,0,0,0.5)"
+  },  
   logItem: {
     marginBottom: "10px",
     cursor: "pointer"
-  },
-  thumb: {
-    width: "50px",
-    height: "50px",
-    objectFit: "cover",
-    borderRadius: "4px",
-    marginTop: "4px"
   },
   modalBackdrop: {
     position: "fixed",
@@ -308,6 +448,33 @@ const styles = {
     objectFit: "contain",
     marginTop: "10px",
     borderRadius: "6px"
+  },
+  logList: {
+    maxHeight: "150px",
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    marginTop: "10px"
+  },
+  logRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "8px 0",
+    borderBottom: "1px solid #777",
+    cursor: "pointer"
+  },
+  logText: {
+    flex: 1,
+    marginRight: "10px"
+  },
+  logThumb: {
+    width: "40px",
+    height: "40px",
+    objectFit: "cover",
+    borderRadius: "4px",
+    border: "1px solid #555"
   }
 };
 

@@ -11,3 +11,11 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+/* Make the date input calendar icon blue */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(35%) sepia(100%) saturate(2000%) hue-rotate(180deg);
+}
+input[type="date"] {
+  background-color: #222;
+  color: #fff;
+}
