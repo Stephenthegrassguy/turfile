@@ -1,9 +1,16 @@
-// ✅ Full App.js (Updated for Placement Mode)
 import React, { useState, useEffect, useRef } from "react";
-import './App.css';
+import "./App.css";
 import { useJsApiLoader } from "@react-google-maps/api";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, addDoc, deleteDoc, doc, onSnapshot, updateDoc, getDocs } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  updateDoc,
+  getDocs
+} from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 import { auth, db, storage } from "./firebase";
@@ -15,6 +22,7 @@ import ManageAreas from "./components/ManageAreas";
 import ControlBar from "./components/ControlBar";
 import IssuesPanel from "./components/IssuesPanel";
 import HeadInventory from "./components/HeadInventory";
+import PreviewPanel from "./components/PreviewPanel";
 
 const containerStyle = {
   width: "100vw",
@@ -40,7 +48,6 @@ function App() {
   const [showManageAreas, setShowManageAreas] = useState(false);
   const [showIssuesPanel, setShowIssuesPanel] = useState(false);
   const [showInventoryPanel, setShowInventoryPanel] = useState(false);
-
   const [logDate, setLogDate] = useState("");
   const [logNotes, setLogNotes] = useState("");
   const [logImage, setLogImage] = useState([]);
@@ -49,10 +56,10 @@ function App() {
   const [mapZoom, setMapZoom] = useState(18);
   const [holes, setHoles] = useState([]);
   const [areas, setAreas] = useState([]);
-
   const [selectedHole, setSelectedHole] = useState("");
   const [selectedArea, setSelectedArea] = useState("");
-
+  const [previewItems, setPreviewItems] = useState([]);
+  const [showPreviewPanel, setShowPreviewPanel] = useState(false);
   const mapRef = useRef(null);
 
   useEffect(() => {
@@ -72,10 +79,10 @@ function App() {
 
   useEffect(() => {
     const unsubscribeHoles = onSnapshot(collection(db, "holes"), (snapshot) => {
-      setHoles(snapshot.docs.map(doc => doc.data().name));
+      setHoles(snapshot.docs.map((doc) => doc.data().name));
     });
     const unsubscribeAreas = onSnapshot(collection(db, "areas"), (snapshot) => {
-      setAreas(snapshot.docs.map(doc => doc.data().name));
+      setAreas(snapshot.docs.map((doc) => doc.data().name));
     });
     return () => {
       unsubscribeHoles();
@@ -109,7 +116,7 @@ function App() {
     if (!selectedItem || !logDate || !logNotes) return;
     setUploading(true);
     let imageUrls = [];
-  
+
     try {
       if (logImage.length > 0) {
         const uploadPromises = logImage.map(file => {
@@ -118,7 +125,7 @@ function App() {
         });
         imageUrls = await Promise.all(uploadPromises);
       }
-  
+
       const logRef = collection(db, `irrigationItems/${selectedItem.id}/logs`);
       await addDoc(logRef, {
         date: logDate,
@@ -126,7 +133,7 @@ function App() {
         imageUrls,
         createdAt: new Date()
       });
-  
+
       setLogDate("");
       setLogNotes("");
       setLogImage([]);
@@ -136,25 +143,19 @@ function App() {
       setUploading(false);
     }
   };
-  
 
   const handleViewHistory = async () => {
     if (!selectedItem || !selectedItem.id) return;
-  
     const logRef = collection(db, `irrigationItems/${selectedItem.id}/logs`);
     const logSnap = await getDocs(logRef);
-  
     const logList = logSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  
-    setLogs(
-      logList.sort((a, b) => {
-        const aTime = a.createdAt?.toDate?.() ?? new Date(a.date);
-        const bTime = b.createdAt?.toDate?.() ?? new Date(b.date);
-        return bTime - aTime; // Newest first
-      })
-    );
+    setLogs(logList.sort((a, b) => {
+      const aTime = a.createdAt?.toDate?.() ?? new Date(a.date);
+      const bTime = b.createdAt?.toDate?.() ?? new Date(b.date);
+      return bTime - aTime;
+    }));
   };
-  
+
   const confirmAndDelete = async () => {
     if (window.confirm("Are you sure you want to delete this item? All logs and data will be permanently removed.")) {
       await deleteDoc(doc(db, "irrigationItems", selectedItem.id));
@@ -178,7 +179,6 @@ function App() {
   const getShapeIcon = (type, zoom = 18) => {
     const scaleFactor = Math.pow(zoom, 1.4) / 8;
     if (!window.google) return null;
-
     switch (type) {
       case "head":
         return {
@@ -217,13 +217,28 @@ function App() {
     }
   };
 
+  const handleConfirmPreview = async () => {
+    const filteredItems = previewItems.filter((item) => !item.duplicate);
+    for (const item of filteredItems) {
+                await addDoc(collection(db, "irrigationItems"), item);
+              }
+              setPreviewItems([]);
+              setShowPreviewPanel(false);
+  };
+
+  const showPreview = (items) => {
+    console.log("Preview Items:", items); // ✅ Add this line
+    setPreviewItems(items);
+    setShowPreviewPanel(true);
+  };
+
   if (!isLoaded) return <div>Loading Map...</div>;
   if (!user) return <Login />;
 
   const currentIssues = items.filter(item => item.status === "issue" && item.issue);
 
   return (
-    <div>
+    <>
       <ControlBar
         mapItems={items}
         setSelectedItem={setSelectedItem}
@@ -277,19 +292,19 @@ function App() {
         onZoomChanged={() => {
           if (mapRef.current) {
             setMapZoom(mapRef.current.getZoom());
-          }
+}
         }}
       >
         {showInventoryPanel && (
-  <HeadInventory
-    holes={holes}
-    areas={areas}
-    onClose={() => setShowInventoryPanel(false)}
-    mapRef={mapRef} // ✅ already passed
-    setSelectedItem={setSelectedItem} // ✅ add this line
-  />
-)}
-
+          <HeadInventory
+            holes={holes}
+            areas={areas}
+            onClose={() => setShowInventoryPanel(false)}
+            mapRef={mapRef}
+            setSelectedItem={setSelectedItem}
+            showPreview={showPreview}
+          />
+        )}
 
         <MapItems
           items={items}
@@ -312,7 +327,18 @@ function App() {
           uploading={uploading}
         />
       </MapComponent>
-    </div>
+
+      {showPreviewPanel && (
+  <div style={{ position: "fixed", top: 100, left: 60, zIndex: 99999 }}>
+    <PreviewPanel
+      previewItems={previewItems}
+      onClose={() => setShowPreviewPanel(false)}
+      onConfirm={handleConfirmPreview}
+    />
+  </div>
+)}
+
+    </>
   );
 }
 
