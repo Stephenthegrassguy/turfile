@@ -1,46 +1,69 @@
 import React, { useState } from "react";
-import { auth } from "./firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "./firebase";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
+} from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 
 function Login({ onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isSignup, setIsSignup] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = async (e) => {
+  const handleAuth = async (e) => {
     e.preventDefault();
-    try {
-      if (email !== "sfeeney@marine-drive.com") {
-        setError("Access denied. Unauthorized email.");
-        return;
-      }
+    setError("");
 
-      await signInWithEmailAndPassword(auth, email, password);
-      onLogin(); // notify App.js you're logged in
+    try {
+      if (isSignup) {
+        const userCred = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCred.user;
+
+        // Create user profile in Firestore
+        await setDoc(doc(db, "users", user.uid), {
+          email,
+          role: "admin",         // Start as admin
+          propertyId: null       // Will set up property later
+        });
+
+        onLogin(); // Notify parent app
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+        onLogin(); // Notify parent app
+      }
     } catch (err) {
-      setError("Invalid email or password.");
+      setError(err.message);
     }
   };
 
   return (
     <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h2>Login</h2>
-      <form onSubmit={handleLogin}>
+      <h2>{isSignup ? "Create Account" : "Login"}</h2>
+      <form onSubmit={handleAuth}>
         <input
           type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          required
         /><br /><br />
         <input
           type="password"
-          placeholder="Access Code"
+          placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          required
         /><br /><br />
-        <button type="submit">Log In</button>
-        {error && <p style={{ color: "red" }}>{error}</p>}
+        <button type="submit">{isSignup ? "Sign Up" : "Log In"}</button>
       </form>
+
+      <button onClick={() => setIsSignup(prev => !prev)} style={{ marginTop: "1rem" }}>
+        {isSignup ? "Already have an account?" : "Create an account"}
+      </button>
+
+      {error && <p style={{ color: "red", marginTop: "1rem" }}>{error}</p>}
     </div>
   );
 }

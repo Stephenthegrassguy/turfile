@@ -9,10 +9,12 @@ import {
   doc,
   onSnapshot,
   updateDoc,
-  getDocs
+  getDocs,
+  getDoc
 } from "firebase/firestore";
+import { query, where} from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-
+import CreateProperty from "./components/CreateProperty";
 import { auth, db, storage } from "./firebase";
 import Login from "./Login";
 import MapComponent from "./components/MapComponent";
@@ -29,10 +31,7 @@ const containerStyle = {
   height: "100vh"
 };
 
-const center = {
-  lat: 49.214167,
-  lng: -123.161944
-};
+
 
 function App() {
   const { isLoaded } = useJsApiLoader({
@@ -40,6 +39,9 @@ function App() {
   });
 
   const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [propertyData, setPropertyData] = useState(null);
   const [items, setItems] = useState([]);
   const [placingType, setPlacingType] = useState(null);
   const [itemName, setItemName] = useState("");
@@ -62,20 +64,76 @@ function App() {
   const [showPreviewPanel, setShowPreviewPanel] = useState(false);
   const mapRef = useRef(null);
 
+  const center = propertyData?.location || {
+    lat: 49.214167,
+    lng: -123.161944
+  };
+  console.log("PropertyData:", propertyData);
+  console.log("Map center:", center);
+  
+  // 🔐 Load current user and their profile
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+
+        const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+        if (userDoc.exists()) {
+          setUserProfile(userDoc.data());
+        } else {
+          console.error("User profile not found.");
+        }
+      } else {
+        setUser(null);
+        setUserProfile(null);
+      }
+
+      setLoadingUser(false);
     });
+
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "irrigationItems"), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setItems(data);
-    });
-    return () => unsubscribe();
-  }, []);
+    const fetchProperty = async () => {
+      if (userProfile?.propertyId) {
+        try {
+          const docRef = doc(db, "properties", userProfile.propertyId);
+          const docSnap = await getDoc(docRef);
+  
+          if (docSnap.exists()) {
+            setPropertyData(docSnap.data());
+          } else {
+            console.warn("Property not found in Firestore.");
+          }
+        } catch (err) {
+          console.error("Error fetching property data:", err);
+        }
+      }
+    };
+  
+    fetchProperty();
+  }, [userProfile]);
+  
+
+   // make sure this is imported
+
+useEffect(() => {
+  if (!userProfile?.propertyId) return;
+
+  const q = query(
+    collection(db, "irrigationItems"),
+    where("propertyId", "==", userProfile.propertyId)
+  );
+
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    setItems(data);
+  });
+
+  return () => unsubscribe();
+}, [userProfile]);
+
 
   useEffect(() => {
     const unsubscribeHoles = onSnapshot(collection(db, "holes"), (snapshot) => {
@@ -220,20 +278,22 @@ function App() {
   const handleConfirmPreview = async () => {
     const filteredItems = previewItems.filter((item) => !item.duplicate);
     for (const item of filteredItems) {
-                await addDoc(collection(db, "irrigationItems"), item);
-              }
-              setPreviewItems([]);
-              setShowPreviewPanel(false);
+      await addDoc(collection(db, "irrigationItems"), item);
+    }
+    setPreviewItems([]);
+    setShowPreviewPanel(false);
   };
 
   const showPreview = (items) => {
-    console.log("Preview Items:", items); // ✅ Add this line
     setPreviewItems(items);
     setShowPreviewPanel(true);
   };
 
-  if (!isLoaded) return <div>Loading Map...</div>;
-  if (!user) return <Login />;
+  if (!isLoaded || loadingUser) return <div>Loading Map...</div>;
+  if (!user) return <Login onLogin={() => setLoadingUser(true)} />;
+  if (!userProfile?.propertyId && user) return <CreateProperty onComplete={() => setLoadingUser(true)} />;
+  if (!userProfile) return <div>Loading user profile...</div>;
+
 
   const currentIssues = items.filter(item => item.status === "issue" && item.issue);
 
@@ -292,7 +352,7 @@ function App() {
         onZoomChanged={() => {
           if (mapRef.current) {
             setMapZoom(mapRef.current.getZoom());
-}
+          }
         }}
       >
         {showInventoryPanel && (
@@ -329,15 +389,14 @@ function App() {
       </MapComponent>
 
       {showPreviewPanel && (
-  <div style={{ position: "fixed", top: 100, left: 60, zIndex: 99999 }}>
-    <PreviewPanel
-      previewItems={previewItems}
-      onClose={() => setShowPreviewPanel(false)}
-      onConfirm={handleConfirmPreview}
-    />
-  </div>
-)}
-
+        <div style={{ position: "fixed", top: 100, left: 60, zIndex: 99999 }}>
+          <PreviewPanel
+            previewItems={previewItems}
+            onClose={() => setShowPreviewPanel(false)}
+            onConfirm={handleConfirmPreview}
+          />
+        </div>
+      )}
     </>
   );
 }

@@ -13,7 +13,7 @@ import {
   button,
   input,
   select,
-  headerBase
+  headerBase,
 } from "../../styles/PanelStyles";
 // Import custom styles specific to this component
 import styles from "./styles";
