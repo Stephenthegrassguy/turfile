@@ -10,6 +10,7 @@ const ControlBar = ({
   setSelectedItem,
   setMapZoom,
   setMapCenter,
+  onShowAccountPanel,
   onShowInventoryPanel
 }) => {
   const styles = {
@@ -83,6 +84,7 @@ const ControlBar = ({
           <button style={styles.button} onClick={onShowInventoryPanel}>Head Inventory</button>
           <button style={styles.button} onClick={onShowIssuesPanel}>Current Issues</button>
           <button style={{ ...styles.button, marginTop: "auto" }} onClick={onLogout}>Logout</button>
+          <button onClick={onShowAccountPanel} className="text-sm text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded shadow">My Account</button>
         </div>
       </div>
       <div style={styles.gradientFade} />
