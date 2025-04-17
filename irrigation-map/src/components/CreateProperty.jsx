@@ -21,7 +21,7 @@ const CreateProperty = ({ onComplete }) => {
   const [loading, setLoading] = useState(false);
 
   const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   });
 
   const onMapClick = useCallback((e) => {
