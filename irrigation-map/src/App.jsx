@@ -25,8 +25,6 @@ import ControlBar from "./components/ControlBar";
 import IssuesPanel from "./components/IssuesPanel";
 import HeadInventory from "./components/HeadInventory";
 import PreviewPanel from "./components/PreviewPanel";
-import AccountPanel from "./components/AccountPanel";
-
 
 const containerStyle = {
   width: "100vw",
@@ -37,7 +35,7 @@ const containerStyle = {
 
 function App() {
   const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   });
 
   const [user, setUser] = useState(null);
@@ -64,7 +62,6 @@ function App() {
   const [selectedArea, setSelectedArea] = useState("");
   const [previewItems, setPreviewItems] = useState([]);
   const [showPreviewPanel, setShowPreviewPanel] = useState(false);
-  const [showAccountPanel, setShowAccountPanel] = useState(false);
   const mapRef = useRef(null);
 
   const center = propertyData?.location || {
@@ -312,7 +309,6 @@ useEffect(() => {
         onShowIssuesPanel={() => setShowIssuesPanel(true)}
         onLogout={() => signOut(auth)}
         onShowInventoryPanel={() => setShowInventoryPanel(true)}
-        onShowAccountPanel={() => setShowAccountPanel(true)}
       />
 
       {showAddObjectForm && (
@@ -347,13 +343,6 @@ useEffect(() => {
         />
       )}
 
-      {showAccountPanel && (
-       <div className="fixed inset-0 z-50 bg-black bg-opacity-40">
-         <AccountPanel onClose={() => setShowAccountPanel(false)} />
-       </div>
-      )}
-
-
       <MapComponent
         center={center}
         containerStyle={containerStyle}
@@ -376,7 +365,7 @@ useEffect(() => {
             showPreview={showPreview}
           />
         )}
-        
+
         <MapItems
           items={items}
           mapZoom={mapZoom}
