@@ -46,7 +46,6 @@ const SearchBar = ({ mapItems, onSelectItem }) => {
         <input
           type="text"
           placeholder="Search..."
-          autoFocus
           value={query}
           onChange={handleSearch}
           onFocus={() => setFocused(true)}

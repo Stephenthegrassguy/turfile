@@ -16,7 +16,7 @@ import {
   headerBase
 } from "../styles/PanelStyles";
 
-const ManageAreas = ({ holes, areas, setShowManageAreas }) => {
+const ManageAreas = ({ holes, areas, onClose }) => {
   const [newArea, setNewArea] = useState("");
   const [newHole, setNewHole] = useState("");
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -103,7 +103,8 @@ const ManageAreas = ({ holes, areas, setShowManageAreas }) => {
               lineHeight: 1,
               cursor: "pointer"
             }}
-            onClick={() => setShowManageAreas(false)}
+            onClick={onClose}
+
           >
             ✕
           </button>

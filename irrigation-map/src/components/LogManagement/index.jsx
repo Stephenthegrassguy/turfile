@@ -109,7 +109,9 @@ const LogManagement = ({
       }));
 
       // Refresh the selected item’s data by retrieving updated info from Firestore
-      await refreshSelectedItem(itemId);
+      if (typeof refreshSelectedItem === "function") {
+        await refreshSelectedItem(itemId);
+      }      
     } catch (error) {
       console.error("Error updating issue status or logging:", error);
     }

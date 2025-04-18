@@ -1,4 +1,4 @@
-// ✅ Updated MapItems.js with Pulsating OverlayView for selected item and label suppression
+// src/components/MapItems.jsx
 import React from "react";
 import { Marker, OverlayView } from "@react-google-maps/api";
 import LogManagement from "./LogManagement";
@@ -22,61 +22,75 @@ const MapItems = ({
   setLogImage,
   uploading,
   refreshSelectedItem
-}) => (
-  <>
-    {items.map(item => (
-      <Marker
-        key={item.id}
-        position={item.position}
-        icon={getShapeIcon(item.type, mapZoom)}
-        onClick={() => {
-          setSelectedItem(item);
-          setLogs([]); // Clear previous logs when selecting a new item
-        }}
-        label={
-          selectedItem?.id === item.id
-            ? undefined // hide label for selected item
-            : {
-                text: item.name || "",
-                fontSize: "11px",
-                fontWeight: "bold",
-                color: "#FFFFFF"
+}) => {
+  return (
+    <>
+      {items
+        .filter(
+          (item) =>
+            item.position &&
+            typeof item.position.lat === "number" &&
+            typeof item.position.lng === "number"
+        )
+        .map((item) => {
+          const icon = getShapeIcon(item.type, mapZoom);
+          console.log("📍 Rendering item:", item.name, item.position);
+          console.log("🎯 Icon for", item.name, icon);
+
+          return (
+            <Marker
+              key={item.id}
+              position={item.position}
+              icon={icon}
+              onClick={() => {
+                setSelectedItem(item);
+                setLogs([]);
+              }}
+              label={
+                selectedItem?.id === item.id
+                  ? undefined
+                  : {
+                      text: item.name || "",
+                      fontSize: "11px",
+                      fontWeight: "bold",
+                      color: "#FFFFFF"
+                    }
               }
-        }
-      />
-    ))}
+            />
+          );
+        })}
 
-    {/* Pulsating dot overlay for selected item */}
-    {selectedItem && selectedItem.position && (
-      <OverlayView
-        position={selectedItem.position}
-        mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-      >
-        <div className="pulsating-dot" />
-      </OverlayView>
-    )}
+      {selectedItem && selectedItem.position && (
+        <OverlayView
+          position={selectedItem.position}
+          mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+        >
+          <div className="pulsating-dot" />
+        </OverlayView>
+      )}
 
-    {selectedItem && (
-      <LogManagement
-        position={selectedItem.position}
-        onClose={() => setSelectedItem(null)}
-        selectedItem={selectedItem}
-        setSelectedItem={setSelectedItem}
-        refreshSelectedItem={refreshSelectedItem}
-        confirmAndDelete={confirmAndDelete}
-        handleAddLog={handleAddLog}
-        handleViewHistory={handleViewHistory}
-        logs={logs}
-        logDate={logDate}
-        setLogDate={setLogDate}
-        logNotes={logNotes}
-        setLogNotes={setLogNotes}
-        logImage={logImage}
-        setLogImage={setLogImage}
-        uploading={uploading}
-      />
-    )}
-  </>
-);
+      {selectedItem && (
+        <LogManagement
+          position={selectedItem.position}
+          onClose={() => setSelectedItem(null)}
+          selectedItem={selectedItem}
+          setSelectedItem={setSelectedItem}
+          refreshSelectedItem={refreshSelectedItem}
+          confirmAndDelete={confirmAndDelete}
+          handleAddLog={handleAddLog}
+          handleViewHistory={handleViewHistory}
+          logs={logs}
+          logDate={logDate}
+          setLogDate={setLogDate}
+          logNotes={logNotes}
+          setLogNotes={setLogNotes}
+          logImage={logImage}
+          setLogImage={setLogImage}
+          uploading={uploading}
+        />
+      )}
+    </>
+  );
+};
 
 export default MapItems;

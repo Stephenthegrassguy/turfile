@@ -82,34 +82,58 @@ const PlacementManagement = ({
         </div>
 
         {/* Panel Body */}
-        <div style={{ ...panelBase, padding: "20px", borderTopLeftRadius: 0, borderTopRightRadius: 0, width: "360px" }}>
+        <div
+          style={{
+            ...panelBase,
+            padding: "20px",
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+            width: "360px"
+          }}
+        >
           <p style={{ marginBottom: "10px" }}>
             Select object type then click the map to place it.
           </p>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <select value={placingType} onChange={(e) => setPlacingType(e.target.value)} style={select}>
-              <option value="">Select Type</option>
+            {/* Object Type */}
+            <select
+              value={placingType ?? ""}
+              onChange={(e) => setPlacingType(e.target.value)}
+              style={select}
+            >
+              <option value="" disabled hidden>Select Type</option>
               <option value="head">Head</option>
               <option value="valve">Valve</option>
               <option value="satellite">Satellite</option>
               <option value="splice box">Splice Box</option>
             </select>
 
-            <select value={selectedHole} onChange={(e) => setSelectedHole(e.target.value)} style={select}>
-              <option value="">Select Hole</option>
+            {/* Hole Selection */}
+            <select
+              value={selectedHole ?? ""}
+              onChange={(e) => setSelectedHole(e.target.value)}
+              style={select}
+            >
+              <option value="" disabled hidden>Select Hole</option>
               {holes.map((hole, i) => (
                 <option key={i} value={hole}>{hole}</option>
               ))}
             </select>
 
-            <select value={selectedArea} onChange={(e) => setSelectedArea(e.target.value)} style={select}>
-              <option value="">Select Area</option>
+            {/* Area Selection */}
+            <select
+              value={selectedArea ?? ""}
+              onChange={(e) => setSelectedArea(e.target.value)}
+              style={select}
+            >
+              <option value="" disabled hidden>Select Area</option>
               {areas.map((area, i) => (
                 <option key={i} value={area}>{area}</option>
               ))}
             </select>
 
+            {/* Name Input */}
             <input
               type="text"
               placeholder="Enter item name"

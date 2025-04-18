@@ -65,7 +65,24 @@ const styles = {
     color: "white",
     borderBottom: "1px solid rgba(255,255,255,0.1)",
     cursor: "pointer"
+  },
+  select: {
+    background: "rgba(30, 30, 30, 0.85)",
+    color: "white",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    borderRadius: "8px",
+    padding: "8px",
+    fontSize: "13px",
+    fontFamily: "inherit",
+    appearance: "none",
+    outline: "none",
+    boxShadow: "0 2px 4px rgba(0, 0, 0, 0.3)",
+    width: "100%",
+    transition: "all 0.2s ease"
   }
+  
 };
+
+
 
 export default styles;

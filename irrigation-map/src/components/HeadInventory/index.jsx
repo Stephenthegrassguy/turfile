@@ -68,24 +68,33 @@ const HeadInventory = ({
   // Listen for map clicks to update head position when in placement mode
   useEffect(() => {
     const mapInstance = mapRef?.current;
+  
     const handleMapClick = async (e) => {
       if (!placingHead || !mapInstance) return;
+  
       const lat = e.latLng.lat();
       const lng = e.latLng.lng();
+  
       const headRef = doc(db, "irrigationItems", placingHead.id);
-      await updateDoc(headRef, { position: { lat, lng } });
+      await updateDoc(headRef, {
+        position: { lat, lng },
+        type: "head", // ✅ Ensure it has a type so it renders on the map
+      });
+  
       setPlacingHead(null);
     };
-
+  
     if (mapInstance && isPlacingMode) {
       mapInstance.addListener("click", handleMapClick);
     }
+  
     return () => {
       if (mapInstance) {
         window.google.maps.event.clearListeners(mapInstance, "click");
       }
     };
   }, [placingHead, isPlacingMode, mapRef]);
+  
 
   // Filter and sort the inventory items
   const filteredItems = items

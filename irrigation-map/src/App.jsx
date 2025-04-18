@@ -1,22 +1,26 @@
-import React, { useState, useEffect, useRef } from "react";
+// src/App.jsx
+import React, { useState, useRef } from "react";
 import "./App.css";
 import { useJsApiLoader } from "@react-google-maps/api";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { signOut } from "firebase/auth";
 import {
-  collection,
   addDoc,
   deleteDoc,
-  doc,
-  onSnapshot,
   updateDoc,
   getDocs,
-  getDoc
+  collection,
+  doc,
 } from "firebase/firestore";
-import { query, where} from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import CreateProperty from "./components/CreateProperty";
-import { auth, db, storage } from "./firebase";
+import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+
+import { useAuthUser } from "./hooks/useAuthUser";
+import { usePropertyData } from "./hooks/usePropertyData";
+import { useIrrigationItems } from "./hooks/useIrrigationItems";
+import { useHolesAndAreas } from "./hooks/useHolesAndAreas";
+import { getShapeIcon } from "./utils/mapIcons";
+
 import Login from "./Login";
+import CreateProperty from "./components/CreateProperty";
 import MapComponent from "./components/MapComponent";
 import MapItems from "./components/MapItems";
 import PlacementManagement from "./components/PlacementManagement";
@@ -25,173 +29,92 @@ import ControlBar from "./components/ControlBar";
 import IssuesPanel from "./components/IssuesPanel";
 import HeadInventory from "./components/HeadInventory";
 import PreviewPanel from "./components/PreviewPanel";
+import { auth, db, storage } from "./firebase";
 
 const containerStyle = {
   width: "100vw",
-  height: "100vh"
+  height: "100vh",
 };
 
+const DEFAULT_CENTER = { lat: 49.214167, lng: -123.161944 };
 
-
-function App() {
+export default function App() {
   const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
   });
 
-  const [user, setUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
-  const [loadingUser, setLoadingUser] = useState(true);
-  const [propertyData, setPropertyData] = useState(null);
-  const [items, setItems] = useState([]);
+  const { user, userProfile, loadingUser } = useAuthUser();
+  const propertyData = usePropertyData(userProfile?.propertyId);
+  const items = useIrrigationItems(userProfile?.propertyId);
+  const { holes, areas } = useHolesAndAreas();
+
   const [placingType, setPlacingType] = useState(null);
   const [itemName, setItemName] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
+
   const [showAddObjectForm, setShowAddObjectForm] = useState(false);
   const [showManageAreas, setShowManageAreas] = useState(false);
+  const [selectedHole, setSelectedHole] = useState("");
+  const [selectedArea, setSelectedArea] = useState("");
   const [showIssuesPanel, setShowIssuesPanel] = useState(false);
   const [showInventoryPanel, setShowInventoryPanel] = useState(false);
+
   const [logDate, setLogDate] = useState("");
   const [logNotes, setLogNotes] = useState("");
   const [logImage, setLogImage] = useState([]);
   const [logs, setLogs] = useState([]);
   const [uploading, setUploading] = useState(false);
+
   const [mapZoom, setMapZoom] = useState(18);
-  const [holes, setHoles] = useState([]);
-  const [areas, setAreas] = useState([]);
-  const [selectedHole, setSelectedHole] = useState("");
-  const [selectedArea, setSelectedArea] = useState("");
   const [previewItems, setPreviewItems] = useState([]);
   const [showPreviewPanel, setShowPreviewPanel] = useState(false);
+
   const mapRef = useRef(null);
+  const center = propertyData?.location || DEFAULT_CENTER;
 
-  const center = propertyData?.location || {
-    lat: 49.214167,
-    lng: -123.161944
-  };
-  console.log("PropertyData:", propertyData);
-  console.log("Map center:", center);
-  
-  // 🔐 Load current user and their profile
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-
-        const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-        if (userDoc.exists()) {
-          setUserProfile(userDoc.data());
-        } else {
-          console.error("User profile not found.");
-        }
-      } else {
-        setUser(null);
-        setUserProfile(null);
-      }
-
-      setLoadingUser(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const fetchProperty = async () => {
-      if (userProfile?.propertyId) {
-        try {
-          const docRef = doc(db, "properties", userProfile.propertyId);
-          const docSnap = await getDoc(docRef);
-  
-          if (docSnap.exists()) {
-            setPropertyData(docSnap.data());
-          } else {
-            console.warn("Property not found in Firestore.");
-          }
-        } catch (err) {
-          console.error("Error fetching property data:", err);
-        }
-      }
-    };
-  
-    fetchProperty();
-  }, [userProfile]);
-  
-
-   // make sure this is imported
-
-useEffect(() => {
-  if (!userProfile?.propertyId) return;
-
-  const q = query(
-    collection(db, "irrigationItems"),
-    where("propertyId", "==", userProfile.propertyId)
-  );
-
-  const unsubscribe = onSnapshot(q, (snapshot) => {
-    const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    setItems(data);
-  });
-
-  return () => unsubscribe();
-}, [userProfile]);
-
-
-  useEffect(() => {
-    const unsubscribeHoles = onSnapshot(collection(db, "holes"), (snapshot) => {
-      setHoles(snapshot.docs.map((doc) => doc.data().name));
-    });
-    const unsubscribeAreas = onSnapshot(collection(db, "areas"), (snapshot) => {
-      setAreas(snapshot.docs.map((doc) => doc.data().name));
-    });
-    return () => {
-      unsubscribeHoles();
-      unsubscribeAreas();
-    };
-  }, []);
+  // --- Handlers --------------------------------------------------------------
 
   const handleMapClick = async (e) => {
-    if (!placingType || !itemName || !selectedHole || !selectedArea) return;
+    if (!placingType || !itemName) return;
     const newItem = {
       type: placingType,
       name: itemName,
-      hole: selectedHole,
-      area: selectedArea,
-      position: {
-        lat: e.latLng.lat(),
-        lng: e.latLng.lng()
-      },
+      hole: selectedHole,     // ✅ NOT selectedItem.hole
+      area: selectedArea,     // ✅ NOT selectedItem.area
+      position: { lat: e.latLng.lat(), lng: e.latLng.lng() },
       status: "working",
-      createdAt: new Date()
+      createdAt: new Date(),
+      propertyId: userProfile.propertyId,
     };
+    
     await addDoc(collection(db, "irrigationItems"), newItem);
+    setShowAddObjectForm(false);
     setPlacingType(null);
     setItemName("");
-    setSelectedHole("");
-    setSelectedArea("");
-    setShowAddObjectForm(false);
   };
 
   const handleAddLog = async () => {
     if (!selectedItem || !logDate || !logNotes) return;
     setUploading(true);
     let imageUrls = [];
-
     try {
-      if (logImage.length > 0) {
-        const uploadPromises = logImage.map(file => {
-          const imageRef = ref(storage, `logs/${selectedItem.id}/${Date.now()}_${file.name}`);
-          return uploadBytes(imageRef, file).then(() => getDownloadURL(imageRef));
+      if (logImage.length) {
+        const uploads = logImage.map((file) => {
+          const refPath = storageRef(
+            storage,
+            `logs/${selectedItem.id}/${Date.now()}_${file.name}`
+          );
+          return uploadBytes(refPath, file).then(() => getDownloadURL(refPath));
         });
-        imageUrls = await Promise.all(uploadPromises);
+        imageUrls = await Promise.all(uploads);
       }
-
       const logRef = collection(db, `irrigationItems/${selectedItem.id}/logs`);
       await addDoc(logRef, {
         date: logDate,
         notes: logNotes,
         imageUrls,
-        createdAt: new Date()
+        createdAt: new Date(),
       });
-
       setLogDate("");
       setLogNotes("");
       setLogImage([]);
@@ -203,19 +126,23 @@ useEffect(() => {
   };
 
   const handleViewHistory = async () => {
-    if (!selectedItem || !selectedItem.id) return;
-    const logRef = collection(db, `irrigationItems/${selectedItem.id}/logs`);
-    const logSnap = await getDocs(logRef);
-    const logList = logSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    setLogs(logList.sort((a, b) => {
-      const aTime = a.createdAt?.toDate?.() ?? new Date(a.date);
-      const bTime = b.createdAt?.toDate?.() ?? new Date(b.date);
-      return bTime - aTime;
-    }));
+    if (!selectedItem) return;
+    const snap = await getDocs(
+      collection(db, `irrigationItems/${selectedItem.id}/logs`)
+    );
+    const allLogs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    setLogs(
+      allLogs.sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate())
+    );
   };
 
   const confirmAndDelete = async () => {
-    if (window.confirm("Are you sure you want to delete this item? All logs and data will be permanently removed.")) {
+    if (!selectedItem) return;
+    if (
+      window.confirm(
+        "Delete this item and all its logs? This cannot be undone."
+      )
+    ) {
       await deleteDoc(doc(db, "irrigationItems", selectedItem.id));
       setSelectedItem(null);
     }
@@ -223,8 +150,10 @@ useEffect(() => {
 
   const toggleStatus = async () => {
     const newStatus = selectedItem.status === "working" ? "issue" : "working";
-    await updateDoc(doc(db, "irrigationItems", selectedItem.id), { status: newStatus });
-    setSelectedItem(prev => ({ ...prev, status: newStatus }));
+    await updateDoc(doc(db, "irrigationItems", selectedItem.id), {
+      status: newStatus,
+    });
+    setSelectedItem((prev) => ({ ...prev, status: newStatus }));
   };
 
   const handleFocusItem = (item) => {
@@ -234,76 +163,48 @@ useEffect(() => {
     setSelectedItem(item);
   };
 
-  const getShapeIcon = (type, zoom = 18) => {
-    const scaleFactor = Math.pow(zoom, 1.4) / 8;
-    if (!window.google) return null;
-    switch (type) {
-      case "head":
-        return {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: scaleFactor,
-          fillColor: "blue",
-          fillOpacity: 1,
-          strokeWeight: 0
-        };
-      case "valve":
-        return {
-          path: "M -10 -10 L 10 -10 L 10 10 L -10 10 Z",
-          fillColor: "red",
-          fillOpacity: 1,
-          strokeWeight: 0,
-          scale: scaleFactor
-        };
-      case "satellite":
-        return {
-          path: "M 0,-10 L 10,10 L -10,10 Z",
-          fillColor: "green",
-          fillOpacity: 1,
-          strokeWeight: 0,
-          scale: scaleFactor
-        };
-      case "splice box":
-        return {
-          path: "M 10 0 L 7 7 L 0 10 L -7 7 L -10 0 L -7 -7 L 0 -10 L 7 -7 Z",
-          fillColor: "purple",
-          fillOpacity: 1,
-          strokeWeight: 0,
-          scale: scaleFactor
-        };
-      default:
-        return null;
-    }
-  };
-
   const handleConfirmPreview = async () => {
-    const filteredItems = previewItems.filter((item) => !item.duplicate);
-    for (const item of filteredItems) {
-      await addDoc(collection(db, "irrigationItems"), item);
+    const itemsToSave = previewItems.filter((i) => !i.duplicate);
+  
+    for (const item of itemsToSave) {
+      await addDoc(collection(db, "irrigationItems"), {
+        ...item,
+        propertyId: userProfile.propertyId, // ✅ Makes it visible to the logged-in user
+        status: "working",                  // ✅ Ensures MapItems includes it
+      });
     }
+  
     setPreviewItems([]);
     setShowPreviewPanel(false);
   };
+  
+  
+  
 
   const showPreview = (items) => {
     setPreviewItems(items);
     setShowPreviewPanel(true);
   };
 
-  if (!isLoaded || loadingUser) return <div>Loading Map...</div>;
-  if (!user) return <Login onLogin={() => setLoadingUser(true)} />;
-  if (!userProfile?.propertyId && user) return <CreateProperty onComplete={() => setLoadingUser(true)} />;
-  if (!userProfile) return <div>Loading user profile...</div>;
+  // --- Render guards ---------------------------------------------------------
 
+  if (loadingUser || !isLoaded) return <div>Loading Map...</div>;
+  if (!user) return <Login onLogin={() => {}} />;
+  if (user && !userProfile?.propertyId)
+    return <CreateProperty onComplete={() => {}} />;
+  if (!userProfile) return <div>Loading profile...</div>;
 
-  const currentIssues = items.filter(item => item.status === "issue" && item.issue);
+  const currentIssues = items.filter((i) => i.status === "issue" && i.issue);
+
+  // --- JSX -------------------------------------------------------------------
 
   return (
     <>
       <ControlBar
         mapItems={items}
         setSelectedItem={setSelectedItem}
-        setMapZoom={(zoom) => mapRef.current.setZoom(zoom)}
-        setMapCenter={(pos) => mapRef.current.panTo(pos)}
+        setMapZoom={(z) => mapRef.current.setZoom(z)}
+        setMapCenter={(p) => mapRef.current.panTo(p)}
         onAddObject={() => setShowAddObjectForm(true)}
         onManageAreas={() => setShowManageAreas(true)}
         onShowIssuesPanel={() => setShowIssuesPanel(true)}
@@ -313,25 +214,26 @@ useEffect(() => {
 
       {showAddObjectForm && (
         <PlacementManagement
-          placingType={placingType}
-          setPlacingType={setPlacingType}
-          itemName={itemName}
-          setItemName={setItemName}
-          holes={holes}
-          selectedHole={selectedHole}
-          setSelectedHole={setSelectedHole}
-          selectedArea={selectedArea}
-          setSelectedArea={setSelectedArea}
-          areas={areas}
-          setShowAddObjectForm={setShowAddObjectForm}
-        />
+        placingType={placingType}
+        setPlacingType={setPlacingType}
+        itemName={itemName}
+        setItemName={setItemName}
+        holes={holes}
+        selectedHole={selectedHole}               // ✅ This was missing!
+        setSelectedHole={setSelectedHole}
+        selectedArea={selectedArea}               // ✅ Also missing!
+        setSelectedArea={setSelectedArea}
+        areas={areas}
+        setShowAddObjectForm={setShowAddObjectForm}
+      />
+      
       )}
 
       {showManageAreas && (
         <ManageAreas
           holes={holes}
           areas={areas}
-          setShowManageAreas={setShowManageAreas}
+          onClose={() => setShowManageAreas(false)}
         />
       )}
 
@@ -354,6 +256,7 @@ useEffect(() => {
             setMapZoom(mapRef.current.getZoom());
           }
         }}
+        
       >
         {showInventoryPanel && (
           <HeadInventory
@@ -400,5 +303,3 @@ useEffect(() => {
     </>
   );
 }
-
-export default App;
