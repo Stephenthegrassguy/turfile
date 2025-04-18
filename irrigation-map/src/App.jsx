@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import "./App.css";
 import { useJsApiLoader } from "@react-google-maps/api";
 import { signOut } from "firebase/auth";
@@ -29,6 +29,8 @@ import ControlBar from "./components/ControlBar";
 import IssuesPanel from "./components/IssuesPanel";
 import HeadInventory from "./components/HeadInventory";
 import PreviewPanel from "./components/PreviewPanel";
+import AccountPanel from "./components/AccountPanel";
+
 import { auth, db, storage } from "./firebase";
 
 const containerStyle = {
@@ -44,27 +46,37 @@ export default function App() {
   });
 
   const { user, userProfile, loadingUser } = useAuthUser();
+  const [userProfileState, setUserProfileState] = useState(null);
+
+  useEffect(() => {
+    if (userProfile) {
+      setUserProfileState(userProfile);
+    }
+  }, [userProfile]);
+
+  const handleProfileUpdate = (updates) => {
+    setUserProfileState((prev) => ({ ...prev, ...updates }));
+  };
+
   const propertyData = usePropertyData(userProfile?.propertyId);
   const items = useIrrigationItems(userProfile?.propertyId);
   const { holes, areas } = useHolesAndAreas();
 
+  const [showAccountPanel, setShowAccountPanel] = useState(false);
   const [placingType, setPlacingType] = useState(null);
   const [itemName, setItemName] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
-
   const [showAddObjectForm, setShowAddObjectForm] = useState(false);
   const [showManageAreas, setShowManageAreas] = useState(false);
   const [selectedHole, setSelectedHole] = useState("");
   const [selectedArea, setSelectedArea] = useState("");
   const [showIssuesPanel, setShowIssuesPanel] = useState(false);
   const [showInventoryPanel, setShowInventoryPanel] = useState(false);
-
   const [logDate, setLogDate] = useState("");
   const [logNotes, setLogNotes] = useState("");
   const [logImage, setLogImage] = useState([]);
   const [logs, setLogs] = useState([]);
   const [uploading, setUploading] = useState(false);
-
   const [mapZoom, setMapZoom] = useState(18);
   const [previewItems, setPreviewItems] = useState([]);
   const [showPreviewPanel, setShowPreviewPanel] = useState(false);
@@ -72,21 +84,19 @@ export default function App() {
   const mapRef = useRef(null);
   const center = propertyData?.location || DEFAULT_CENTER;
 
-  // --- Handlers --------------------------------------------------------------
-
   const handleMapClick = async (e) => {
     if (!placingType || !itemName) return;
     const newItem = {
       type: placingType,
       name: itemName,
-      hole: selectedHole,     // ✅ NOT selectedItem.hole
-      area: selectedArea,     // ✅ NOT selectedItem.area
+      hole: selectedHole,
+      area: selectedArea,
       position: { lat: e.latLng.lat(), lng: e.latLng.lng() },
       status: "working",
       createdAt: new Date(),
       propertyId: userProfile.propertyId,
     };
-    
+
     await addDoc(collection(db, "irrigationItems"), newItem);
     setShowAddObjectForm(false);
     setPlacingType(null);
@@ -100,10 +110,7 @@ export default function App() {
     try {
       if (logImage.length) {
         const uploads = logImage.map((file) => {
-          const refPath = storageRef(
-            storage,
-            `logs/${selectedItem.id}/${Date.now()}_${file.name}`
-          );
+          const refPath = storageRef(storage, `logs/${selectedItem.id}/${Date.now()}_${file.name}`);
           return uploadBytes(refPath, file).then(() => getDownloadURL(refPath));
         });
         imageUrls = await Promise.all(uploads);
@@ -127,22 +134,14 @@ export default function App() {
 
   const handleViewHistory = async () => {
     if (!selectedItem) return;
-    const snap = await getDocs(
-      collection(db, `irrigationItems/${selectedItem.id}/logs`)
-    );
+    const snap = await getDocs(collection(db, `irrigationItems/${selectedItem.id}/logs`));
     const allLogs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setLogs(
-      allLogs.sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate())
-    );
+    setLogs(allLogs.sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate()));
   };
 
   const confirmAndDelete = async () => {
     if (!selectedItem) return;
-    if (
-      window.confirm(
-        "Delete this item and all its logs? This cannot be undone."
-      )
-    ) {
+    if (window.confirm("Delete this item and all its logs? This cannot be undone.")) {
       await deleteDoc(doc(db, "irrigationItems", selectedItem.id));
       setSelectedItem(null);
     }
@@ -150,9 +149,7 @@ export default function App() {
 
   const toggleStatus = async () => {
     const newStatus = selectedItem.status === "working" ? "issue" : "working";
-    await updateDoc(doc(db, "irrigationItems", selectedItem.id), {
-      status: newStatus,
-    });
+    await updateDoc(doc(db, "irrigationItems", selectedItem.id), { status: newStatus });
     setSelectedItem((prev) => ({ ...prev, status: newStatus }));
   };
 
@@ -165,38 +162,28 @@ export default function App() {
 
   const handleConfirmPreview = async () => {
     const itemsToSave = previewItems.filter((i) => !i.duplicate);
-  
     for (const item of itemsToSave) {
       await addDoc(collection(db, "irrigationItems"), {
         ...item,
-        propertyId: userProfile.propertyId, // ✅ Makes it visible to the logged-in user
-        status: "working",                  // ✅ Ensures MapItems includes it
+        propertyId: userProfile.propertyId,
+        status: "working",
       });
     }
-  
     setPreviewItems([]);
     setShowPreviewPanel(false);
   };
-  
-  
-  
 
   const showPreview = (items) => {
     setPreviewItems(items);
     setShowPreviewPanel(true);
   };
 
-  // --- Render guards ---------------------------------------------------------
-
   if (loadingUser || !isLoaded) return <div>Loading Map...</div>;
   if (!user) return <Login onLogin={() => {}} />;
-  if (user && !userProfile?.propertyId)
-    return <CreateProperty onComplete={() => {}} />;
+  if (user && !userProfile?.propertyId) return <CreateProperty onComplete={() => {}} />;
   if (!userProfile) return <div>Loading profile...</div>;
 
   const currentIssues = items.filter((i) => i.status === "issue" && i.issue);
-
-  // --- JSX -------------------------------------------------------------------
 
   return (
     <>
@@ -210,23 +197,24 @@ export default function App() {
         onShowIssuesPanel={() => setShowIssuesPanel(true)}
         onLogout={() => signOut(auth)}
         onShowInventoryPanel={() => setShowInventoryPanel(true)}
+        onShowAccountPanel={() => setShowAccountPanel(true)}
+        profileImageURL={userProfileState?.profilePic}
       />
 
       {showAddObjectForm && (
         <PlacementManagement
-        placingType={placingType}
-        setPlacingType={setPlacingType}
-        itemName={itemName}
-        setItemName={setItemName}
-        holes={holes}
-        selectedHole={selectedHole}               // ✅ This was missing!
-        setSelectedHole={setSelectedHole}
-        selectedArea={selectedArea}               // ✅ Also missing!
-        setSelectedArea={setSelectedArea}
-        areas={areas}
-        setShowAddObjectForm={setShowAddObjectForm}
-      />
-      
+          placingType={placingType}
+          setPlacingType={setPlacingType}
+          itemName={itemName}
+          setItemName={setItemName}
+          holes={holes}
+          selectedHole={selectedHole}
+          setSelectedHole={setSelectedHole}
+          selectedArea={selectedArea}
+          setSelectedArea={setSelectedArea}
+          areas={areas}
+          setShowAddObjectForm={setShowAddObjectForm}
+        />
       )}
 
       {showManageAreas && (
@@ -256,7 +244,6 @@ export default function App() {
             setMapZoom(mapRef.current.getZoom());
           }
         }}
-        
       >
         {showInventoryPanel && (
           <HeadInventory
@@ -299,6 +286,15 @@ export default function App() {
             onConfirm={handleConfirmPreview}
           />
         </div>
+      )}
+
+      {showAccountPanel && (
+        <AccountPanel
+          user={user}
+          userProfile={userProfileState}
+          onClose={() => setShowAccountPanel(false)}
+          onProfileUpdate={handleProfileUpdate}
+        />
       )}
     </>
   );

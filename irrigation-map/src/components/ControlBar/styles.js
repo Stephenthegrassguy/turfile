@@ -44,6 +44,7 @@ const styles = {
       flexShrink: 0,
       background: "rgba(0, 0, 0, 0.3)",
       borderRadius: "50%",
+      overflow: "hidden",
       boxShadow: "inset 0 0 4px rgba(255, 255, 255, 0.1)"
     },
     labelWrapper: {
@@ -56,6 +57,11 @@ const styles = {
     buttonLabel: {
       fontSize: "13px",
       color: "white"
+    },
+    profileImage: {
+      width: "100%",
+      height: "100%",
+      objectFit: "cover",
     }
   };
   
